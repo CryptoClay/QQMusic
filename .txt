@@ -1,0 +1,48 @@
+QQMusic/
+│
+├── backend/
+│   ├── app/
+│   │   ├── __init__.py
+│   │   ├── main.py                 # Точка входа FastAPI
+│   │   │
+│   │   ├── core/                   # Конфигурация приложения
+│   │   │   ├── __init__.py
+│   │   │   └── config.py           # .env и настройки
+│   │   │
+│   │   ├── api/                    # HTTP endpoints
+│   │   │   ├── __init__.py
+│   │   │   └── v1/
+│   │   │       ├── __init__.py
+│   │   │       ├── search.py       # GET /search
+│   │   │       └── tracks.py       # GET /tracks/{id}
+│   │   │
+│   │   ├── schemas/                # Pydantic-модели
+│   │   │   ├── __init__.py
+│   │   │   ├── track.py            # Track
+│   │   │   └── playback.py         # Playback
+│   │   │
+│   │   ├── providers/              # Источники музыки
+│   │   │   ├── __init__.py
+│   │   │   ├── base.py             # MusicProvider (ABC)
+│   │   │   ├── audius.py           # AudiusProvider
+│   │   │   ├── jamendo.py          # JamendoProvider
+│   │   │   └── local.py            # LocalProvider
+│   │   │
+│   │   └── services/               # Бизнес-логика
+│   │       ├── __init__.py
+│   │       ├── search.py           # Поиск по провайдерам
+│   │       └── playback.py         # Выбор источника
+│   │
+│   ├── tests/
+│   │   ├── test_providers.py
+│   │   └── test_search.py
+│   │
+│   ├── .env                        # Секреты (не коммитить)
+│   ├── .env.example                # Пример конфигурации
+│   └── pyproject.toml              # Зависимости Python
+│
+├── frontend/                       # React (позже)
+│
+├── .gitignore
+├── README.md
+└── compose.yaml                    # Docker (позже)
