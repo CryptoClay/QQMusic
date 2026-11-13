@@ -1,11 +1,12 @@
+import { tabStorage } from './storage';
 import { listenBusy } from './listen';
 import { ROUTE_EVENT } from './router';
 
 /** Picks up a new PWA build without the user doing anything. The Android app keeps one WebView with the page for
  * the whole life of its process (days), so a rebuilt Hub would otherwise never reach it.
  *
- * `__HM_BUILD__` is this bundle's build id; the Hub reports the one it serves in `/healthz` (`web_build`, read from
- * index.html). Checked when the page comes back on screen (`visibilitychange`, and `hm:resume` from the app when
+ * `__QQMUSIC_BUILD__` is this bundle's build id; the Hub reports the one it serves in `/healthz` (`web_build`, read from
+ * index.html). Checked when the page comes back on screen (`visibilitychange`, and `qqmusic:resume` from the app when
  * the Hub tab is shown again) and on route changes (at most once a minute). A page with another build reloads
  * itself, keeping its route (the hash):
  * - right away, if it is idle: no sheet or dialog open, no field holding typed text, not on the
@@ -13,14 +14,14 @@ import { ROUTE_EVENT } from './router';
  * - otherwise on the next move to another screen (a new route path; a query rewritten by typing in the search box
  *   does not count), unless the page's player plays. */
 
-const BUILD: string = __HM_BUILD__;
+const BUILD: string = __QQMUSIC_BUILD__;
 const CHECK_EVERY_MS = 60_000;
-/** sessionStorage: the build a reload was already made for (a page still old after it does not reload again). */
-const RELOADED_FOR = 'hm-reloaded-for';
+/** tabStorage: the build a reload was already made for (a page still old after it does not reload again). */
+const RELOADED_FOR = 'qqmusic-reloaded-for';
 /** Routes whose state lives only in the page (files picked, a share being handled, typing a password). */
 const HOLD_ROUTES = ['/upload', '/share', '/login'];
 /** Event the Android app fires when the Hub tab is shown again (`HubFragment.onStart`). */
-export const RESUME_EVENT = 'hm:resume';
+export const RESUME_EVENT = 'qqmusic:resume';
 
 let lastCheck = 0;
 let checking: Promise<void> | null = null;
@@ -80,8 +81,8 @@ function holdsState(): boolean {
 function canReload(): boolean {
   if (!newer || listenBusy()) return false;
   try {
-    if (sessionStorage.getItem(RELOADED_FOR) === newer) return false;
-    sessionStorage.setItem(RELOADED_FOR, newer);
+    if (tabStorage.getItem(RELOADED_FOR) === newer) return false;
+    tabStorage.setItem(RELOADED_FOR, newer);
   } catch {
     /* no storage: reload anyway, the Hub serves the new build */
   }

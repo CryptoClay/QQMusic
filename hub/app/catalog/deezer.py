@@ -42,7 +42,7 @@ RECORD_TYPES = {"album", "single", "ep", "compile"}
 PAGE_LIMIT = 100
 QUOTA_CODES = {4, 700}  # Quota limit exceeded, Service busy
 NOT_FOUND_CODE = 800
-USER_AGENT = "HomeMusic/0.1"
+USER_AGENT = "QQMusic/0.1"
 
 M = TypeVar("M", bound=BaseModel)
 

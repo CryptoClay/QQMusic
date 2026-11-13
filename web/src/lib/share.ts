@@ -6,7 +6,8 @@ interface ShareBridge {
 }
 
 function bridge(): ShareBridge | undefined {
-  return (window as unknown as { HomeMusicAndroid?: ShareBridge }).HomeMusicAndroid;
+  const native = window as unknown as { QQMusicAndroid?: ShareBridge; HomeMusicAndroid?: ShareBridge };
+  return native.QQMusicAndroid ?? native.HomeMusicAndroid;
 }
 
 export function canShare(): boolean {

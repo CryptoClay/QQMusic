@@ -190,7 +190,7 @@ async def create(s: AsyncSession, user_id: int, *, source: str, method: str, tok
     if method == "device":
         s.add(imp)
         await s.flush()
-        code = await yandex.device_start(f"homemusic-{user_id}-{imp.id}")
+        code = await yandex.device_start(f"qqmusic-{user_id}-{imp.id}")
         expires = utcnow() + timedelta(seconds=int(code.get("expires_in") or 300))
         imp.status = "auth"
         imp.auth_json = {"device_code": encrypt(code["device_code"]), "user_code": code["user_code"],

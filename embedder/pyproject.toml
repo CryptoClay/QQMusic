@@ -1,7 +1,7 @@
 [project]
-name = "homemusic-embedder"
+name = "qqmusic-embedder"
 version = "0.1.0"
-description = "HomeMusic embedder: audio/text vectors (MuQ-MuLan) on the GPU for mixes and the wave"
+description = "QQMusic embedder: audio/text vectors (MuQ-MuLan) on the GPU for mixes and the wave"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "fastapi==0.145.0",

@@ -68,7 +68,7 @@ async def _navidrome_ok() -> bool:
         await nd.aclose()
 
 
-_BUILD_META = re.compile(r'<meta\s+name="hm-build"\s+content="([^"]+)"')
+_BUILD_META = re.compile(r'<meta\s+name="(?:qqmusic-build|hm-build)"\s+content="([^"]+)"')
 _build_cache: tuple[tuple[str, int, int], str | None] | None = None
 
 
@@ -208,7 +208,7 @@ async def apk_file():
 
     data = _read_release()
     name = data.get("file", "")
-    if not isinstance(name, str) or not re.fullmatch(r"HomeMusic-\d+\.\d+\.\d+-\d+\.apk", name):
+    if not isinstance(name, str) or not re.fullmatch(r"(?:QQMusic|HomeMusic)-\d+\.\d+\.\d+-\d+\.apk", name):
         raise HTTPException(404, "Нет сборки приложения")
     root = _apk_dir().resolve()
     path = (root / name).resolve()

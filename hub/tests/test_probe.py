@@ -150,7 +150,7 @@ async def test_probe_sees_our_tags(media: Path, tmp_path: Path) -> None:
         write_tags(p, TagData(title="Т", artist="А", track_uid=uid, explicit=True))
         info = await probe(p)
         assert info.tags.get("title") == "Т", ext
-        assert info.tags.get("homemusic_track_id") == uid, (ext, info.tags)
+        assert info.tags.get("qqmusic_track_id") == uid, (ext, info.tags)
 
 
 @needs_ff

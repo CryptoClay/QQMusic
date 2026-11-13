@@ -1,7 +1,7 @@
-# HomeMusic: Navidrome (library + streaming) + Hub (search, downloads, uploads, AI) + reverse SSH tunnel to the VPS.
+# QQMusic: Navidrome + browser/server Hub; optional recommendation and gateway services.
 # Start / update:  docker compose up -d --build        Stop: docker compose down
 # Settings come from .env (copy .env.example). MUSIC_ROOT is a Windows folder, e.g. B:\Music.
-name: homemusic
+name: qqmusic
 
 x-logging: &logging
   driver: local
@@ -12,7 +12,7 @@ x-logging: &logging
 services:
   navidrome:
     image: deluan/navidrome:0.64.2
-    container_name: homemusic_navidrome
+    container_name: qqmusic_navidrome
     restart: unless-stopped
     ports:
       - "4533:4533"
@@ -46,8 +46,8 @@ services:
     build:
       context: .
       dockerfile: hub/Dockerfile
-    image: homemusic-hub:local
-    container_name: homemusic_hub
+    image: qqmusic-hub:local
+    container_name: qqmusic_hub
     restart: unless-stopped
     depends_on:
       navidrome:
@@ -80,7 +80,7 @@ services:
   # Keep the image version in sync with bgutil-ytdlp-pot-provider in hub/pyproject.toml.
   youtube-pot:
     image: brainicism/bgutil-ytdlp-pot-provider:2.0.2
-    container_name: homemusic_youtube_pot
+    container_name: qqmusic_youtube_pot
     restart: unless-stopped
     init: true
     expose:
@@ -98,9 +98,10 @@ services:
   # Audio/text vectors (MuQ-MuLan) for mixes and «Моя волна» — MIXES.md, section 4.2. Only the compose network
   # reaches it (no published port): the Hub calls http://embedder:8090 (EMBEDDER_URL).
   embedder:
+    profiles: [recommendations]
     build: ./embedder
-    image: homemusic-embedder:local
-    container_name: homemusic_embedder
+    image: qqmusic-embedder:local
+    container_name: qqmusic_embedder
     restart: unless-stopped
     expose:
       - "8090"
@@ -139,9 +140,10 @@ services:
   # Reverse SSH tunnel: the VPS listens on 127.0.0.1:4533 / 127.0.0.1:8080 and Caddy serves them over HTTPS.
   # The tunnel key only allows these two remote listens.
   tunnel:
+    profiles: [gateway]
     build: ./gateway/tunnel
-    image: homemusic-tunnel:local
-    container_name: homemusic_tunnel
+    image: qqmusic-tunnel:local
+    container_name: qqmusic_tunnel
     restart: unless-stopped
     init: true
     read_only: true
@@ -150,9 +152,9 @@ services:
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     environment:
-      VPS_HOST: ${VPS_HOST:?set VPS_HOST in .env}
+      VPS_HOST: ${VPS_HOST:-}
       VPS_PORT: "22"
-      VPS_USER: homemusic-tunnel
+      VPS_USER: ${VPS_USER:-qqmusic-tunnel}
       FORWARDS: "127.0.0.1:4533:navidrome:4533 127.0.0.1:8080:hub:8080"
       RETRY_DELAY: "10"
       HOME: /tmp
@@ -169,6 +171,10 @@ volumes:
   # SQLite databases live on the WSL2 ext4 disk, not on the Windows bind mount (locking/WAL are unreliable there).
   # The Hub copies daily backups of both into MUSIC_ROOT/.backups.
   navidrome-data:
+    name: ${QQMUSIC_NAVIDROME_VOLUME:-qqmusic_navidrome-data}
   hub-data:
+    name: ${QQMUSIC_HUB_VOLUME:-qqmusic_hub-data}
   embedder-data:
+    name: ${QQMUSIC_EMBEDDER_VOLUME:-qqmusic_embedder-data}
   embedder-models:
+    name: ${QQMUSIC_MODELS_VOLUME:-qqmusic_embedder-models}

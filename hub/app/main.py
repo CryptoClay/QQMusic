@@ -1,4 +1,4 @@
-"""HomeMusic Hub: FastAPI app (API + PWA static files) with in-process job workers."""
+"""QQMusic Hub: FastAPI app (API + PWA static files) with in-process job workers."""
 
 from __future__ import annotations
 

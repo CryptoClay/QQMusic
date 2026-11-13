@@ -1,3 +1,4 @@
+import { clientStorage } from './storage';
 import { api, ApiError } from '../api/client';
 import type { FavoriteTarget, LaunchOrigin, PlayEventIn, PlayKind } from '../api/types';
 import { canSendPlayEvent, typedFavoritesSupported } from './capabilities';
@@ -9,8 +10,8 @@ import { canSendPlayEvent, typedFavoritesSupported } from './capabilities';
 
 export type PlayTarget = Partial<FavoriteTarget>;
 
-const KEY = 'hm-play-events';
-const EVENT_KEY = 'hm-play-event:';
+const KEY = 'qqmusic-play-events';
+const EVENT_KEY = 'qqmusic-play-event:';
 const SEND_DELAY_MS = 3000;
 const BATCH_SIZE = 500;
 
@@ -31,18 +32,18 @@ let sending = false;
 function load(): QueuedEvent[] {
   const rows = new Map<string, QueuedEvent>();
   try {
-    const legacy = JSON.parse(localStorage.getItem(KEY) ?? '[]') as unknown;
+    const legacy = JSON.parse(clientStorage.getItem(KEY) ?? '[]') as unknown;
     if (Array.isArray(legacy)) {
       for (const e of legacy as QueuedEvent[]) if (e.event_id) {
-        localStorage.setItem(EVENT_KEY + e.event_id, JSON.stringify(e));
+        clientStorage.setItem(EVENT_KEY + e.event_id, JSON.stringify(e));
         rows.set(e.event_id, e);
       }
-      localStorage.removeItem(KEY);
+      clientStorage.removeItem(KEY);
     }
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
+    for (let i = 0; i < clientStorage.length; i++) {
+      const key = clientStorage.key(i);
       if (!key?.startsWith(EVENT_KEY)) continue;
-      const e = JSON.parse(localStorage.getItem(key) ?? 'null') as QueuedEvent | null;
+      const e = JSON.parse(clientStorage.getItem(key) ?? 'null') as QueuedEvent | null;
       if (e?.event_id) rows.set(e.event_id, e);
     }
   } catch (e) { console.error('Could not read listening outbox', e); }
@@ -51,7 +52,7 @@ function load(): QueuedEvent[] {
 
 function save(events: QueuedEvent[]) {
   try {
-    for (const event of events) localStorage.setItem(EVENT_KEY + event.event_id, JSON.stringify(event));
+    for (const event of events) clientStorage.setItem(EVENT_KEY + event.event_id, JSON.stringify(event));
     return true;
   } catch (e) {
     console.error('Could not persist listening outbox', e);
@@ -61,7 +62,7 @@ function save(events: QueuedEvent[]) {
 
 function removeStored(ids: Set<string>) {
   for (const id of ids) {
-    try { localStorage.removeItem(EVENT_KEY + id); } catch (e) { console.error('Could not acknowledge listening event', e); }
+    try { clientStorage.removeItem(EVENT_KEY + id); } catch (e) { console.error('Could not acknowledge listening event', e); }
   }
 }
 

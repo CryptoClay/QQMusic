@@ -16,7 +16,7 @@ const AUDIO_EXT = /\.(mp3|m4a|aac|flac|ogg|oga|opus|wav)$/i;
 
 export const isAudioFile = (f: File) => f.type.startsWith('audio/') || AUDIO_EXT.test(f.name);
 
-// Files handed over by the Share page (Android "Share" → HomeMusic); consumed on mount.
+// Files handed over by the Share page (Android "Share" → QQMusic); consumed on mount.
 let handoff: File[] = [];
 export function queueFilesForUpload(files: File[]) {
   handoff = files;

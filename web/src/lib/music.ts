@@ -1,3 +1,4 @@
+import { clientStorage } from './storage';
 import { useSyncExternalStore } from 'react';
 import { request } from '../api/client';
 
@@ -45,7 +46,7 @@ export function restoreMusic(id: number | null) {
   settings = { ...DEFAULT_MUSIC, eq_gains: [...DEFAULT_MUSIC.eq_gains] };
   if (id !== null) {
     try {
-      const value = JSON.parse(localStorage.getItem(`qqmusic-settings:${id}`) ?? 'null');
+      const value = JSON.parse(clientStorage.getItem(`qqmusic-settings:${id}`) ?? 'null');
       if (
         value &&
         Array.isArray(value.eq_gains) &&
@@ -87,7 +88,7 @@ export async function saveMusic(value: MusicPreferences) {
   if (account === owner && revision === requested) {
     settings = result;
     try {
-      localStorage.setItem(`qqmusic-settings:${owner}`, JSON.stringify(result));
+      clientStorage.setItem(`qqmusic-settings:${owner}`, JSON.stringify(result));
     } catch {}
     emit();
   }

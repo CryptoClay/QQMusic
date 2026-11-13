@@ -122,7 +122,7 @@ export function MiniPlayer() {
           {STANDALONE && (
             <div className="hidden w-36 shrink-0 items-center gap-1.5 text-muted md:flex">
               <Icon name="volume" size={18} className="shrink-0" />
-              <input type="range" className="hm-range min-w-0 flex-1" aria-label="Громкость"
+              <input type="range" className="qqmusic-range min-w-0 flex-1" aria-label="Громкость"
                 aria-valuetext={`${Math.round(volume * 100)}%`}
                 min={0} max={100} step={1} value={Math.round(volume * 100)}
                 style={{ '--p': `${volume * 100}%` } as CSSProperties}
@@ -169,7 +169,7 @@ export function MiniPlayer() {
           <span className="w-9 shrink-0 text-right">{fmtDuration(shownPos) || '0:00'}</span>
           <input
             type="range"
-            className="hm-range min-w-0 flex-1"
+            className="qqmusic-range min-w-0 flex-1"
             aria-label="Перемотка"
             min={0}
             max={Math.max(1, Math.round(duration))}

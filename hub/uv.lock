@@ -273,7 +273,7 @@ wheels = [
 ]
 
 [[package]]
-name = "homemusic-hub"
+name = "qqmusic-hub"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

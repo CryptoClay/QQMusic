@@ -42,3 +42,8 @@ def test_healthz_reports_web_build(tmp_path, monkeypatch):
     monkeypatch.setattr(system, "get_settings", lambda: SimpleNamespace(static_dir=tmp_path))
     out = asyncio.run(system.healthz())
     assert out.ok and out.navidrome and out.web_build == "b1"
+
+
+def test_qqmusic_build_meta_is_reported(tmp_path):
+    (tmp_path / "index.html").write_text(INDEX.replace("hm-build", "qqmusic-build").format(id="qq-build"))
+    assert system.web_build(tmp_path) == "qq-build"

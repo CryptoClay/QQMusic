@@ -29,15 +29,15 @@
   --tabbar-h: 64px; /* TabBar height; fixed bottom bars sit above it */
   /* --player-h: MiniPlayer height while it shows (set by it); fixed bottom bars sit above it too */
 }
-:root.hm-embedded {
+:root.qqmusic-embedded {
   --tabbar-h: 0px; /* inside the Android app: no PWA tab bar */
-  /* the app's own background (sent by the app as --hm-bg): no seam at its status bar and players */
-  --color-bg: var(--hm-bg, #000000);
+  /* the app's own background (sent by the app as --qqmusic-bg): no seam at its status bar and players */
+  --color-bg: var(--qqmusic-bg, #000000);
 }
-/* Inside the app in its light theme (the app sets .hm-light): the app's light colors, green as its accent. */
-:root.hm-embedded.hm-light {
+/* Inside the app in its light theme (the app sets .qqmusic-light): the app's light colors, green as its accent. */
+:root.qqmusic-embedded.qqmusic-light {
   color-scheme: light;
-  --color-bg: var(--hm-bg, #f6fbf3);
+  --color-bg: var(--qqmusic-bg, #f6fbf3);
   --color-surface: #ecf1ea;
   --color-raised: #e4eae2;
   --color-line: #d3dad1;
@@ -62,7 +62,7 @@
 }
 
 /* One QQMusic palette at every browser width; Android supplies its own native theme. */
-  :root:not(.hm-embedded) {
+  :root:not(.qqmusic-embedded) {
     --color-bg: #111214;
     --color-surface: #1b1c1e;
     --color-raised: #262526;
@@ -77,7 +77,7 @@
     --skeleton-a: #222123;
     --skeleton-b: #393432;
   }
-  :root:not(.hm-embedded) .qq-login {
+  :root:not(.qqmusic-embedded) .qq-login {
     background: radial-gradient(ellipse at 50% 0%, #4b2a1b 0%, #211915 35%, #111214 72%);
   }
 
@@ -128,18 +128,18 @@
   .card {
     @apply rounded-xl bg-surface;
   }
-  .hm-range {
+  .qqmusic-range {
     appearance: none;
     height: 20px;
     background: transparent;
     cursor: pointer;
   }
-  .hm-range::-webkit-slider-runnable-track {
+  .qqmusic-range::-webkit-slider-runnable-track {
     height: 4px;
     border-radius: 2px;
     background: linear-gradient(to right, var(--color-fg) var(--p, 0%), var(--track, #4a4a4a) var(--p, 0%));
   }
-  .hm-range::-webkit-slider-thumb {
+  .qqmusic-range::-webkit-slider-thumb {
     appearance: none;
     width: 12px;
     height: 12px;
@@ -147,24 +147,24 @@
     border-radius: 50%;
     background: var(--color-fg);
   }
-  .hm-range::-moz-range-track {
+  .qqmusic-range::-moz-range-track {
     height: 4px;
     border-radius: 2px;
     background: var(--track, #4a4a4a);
   }
-  .hm-range::-moz-range-progress {
+  .qqmusic-range::-moz-range-progress {
     height: 4px;
     border-radius: 2px;
     background: var(--color-fg);
   }
-  .hm-range::-moz-range-thumb {
+  .qqmusic-range::-moz-range-thumb {
     width: 12px;
     height: 12px;
     border: 0;
     border-radius: 50%;
     background: var(--color-fg);
   }
-  .hm-range:disabled {
+  .qqmusic-range:disabled {
     cursor: default;
     opacity: 0.5;
   }
@@ -182,7 +182,7 @@
   }
 }
 
-@keyframes hm-fade-up {
+@keyframes qqmusic-fade-up {
   from {
     opacity: 0;
     transform: translateY(12px);
@@ -193,10 +193,10 @@
   }
 }
 .anim-up {
-  animation: hm-fade-up 0.18s ease-out;
+  animation: qqmusic-fade-up 0.18s ease-out;
 }
 
-@keyframes hm-shimmer {
+@keyframes qqmusic-shimmer {
   0% {
     background-position: -200px 0;
   }
@@ -207,7 +207,7 @@
 .skeleton {
   background: linear-gradient(90deg, var(--skeleton-a, #1b1b1b) 0, var(--skeleton-b, #262626) 40%, var(--skeleton-a, #1b1b1b) 80%);
   background-size: 400px 100%;
-  animation: hm-shimmer 1.2s infinite linear;
+  animation: qqmusic-shimmer 1.2s infinite linear;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,3 +1,4 @@
+import { clientStorage } from './storage';
 import { isDesktop } from './desktop';
 
 /** Smoothed-loudness source for the «Моя волна» glow (`components/WaveGlow.tsx`, mounted only by the desktop hero): an
@@ -8,15 +9,15 @@ import { isDesktop } from './desktop';
  *  - the element is connected only while it is playing and the context is already `running` (a suspended context
  *    would make it silent) and plays from the same origin (a cross-origin source without CORS would be muted),
  *  - the context is resumed again on every `play` and when the browser suspends it,
- *  - `localStorage['hm-wave-audio'] = '0'` switches it off.
+ *  - `clientStorage['qqmusic-wave-audio'] = '0'` switches it off.
  * Without it the glow has no loudness input at all (a still, calm shape) — nothing else depends on it. */
 
-const FLAG = 'hm-wave-audio';
+const FLAG = 'qqmusic-wave-audio';
 
 export function loudnessEnabled(): boolean {
   if (!isDesktop() || typeof AudioContext === 'undefined') return false;
   try {
-    if (localStorage.getItem(FLAG) === '0') return false;
+    if (clientStorage.getItem(FLAG) === '0') return false;
   } catch { /* storage unavailable: the default below */ }
   return true;
 }

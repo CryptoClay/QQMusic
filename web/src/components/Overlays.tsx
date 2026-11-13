@@ -42,10 +42,10 @@ export function Overlays() {
       </div>
 
       {dialog && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-5" role="alertdialog" aria-modal="true" aria-labelledby="hm-dialog-title">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-5" role="alertdialog" aria-modal="true" aria-labelledby="qqmusic-dialog-title">
           <button type="button" aria-label="Отмена" className="absolute inset-0 bg-black/70" onClick={() => dialog.resolve(false)} />
           <div className="anim-up relative w-full max-w-sm rounded-2xl bg-surface p-5">
-            <h2 id="hm-dialog-title" className="text-lg font-bold">
+            <h2 id="qqmusic-dialog-title" className="text-lg font-bold">
               {dialog.title}
             </h2>
             {dialog.body && <p className="mt-2 whitespace-pre-line text-sm text-muted">{dialog.body}</p>}

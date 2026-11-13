@@ -1,3 +1,4 @@
+import { clientStorage, tabStorage } from './storage';
 import { useSyncExternalStore } from 'react';
 import { api, errorMessage, isAbort, listenPreviewUrl, listenStreamUrl, request } from '../api/client';
 import type { LaunchOrigin, ListenOut } from '../api/types';
@@ -79,19 +80,19 @@ export interface ListenState {
 /** The id the Hub knows a track of a playlist by: its Navidrome song, else the catalog ref. */
 export const idOf = (t: Pick<ListenTrack, 'ref' | 'nd_song_id'>) => t.nd_song_id || t.ref;
 
-const VOLUME_KEY = 'hm-listen-volume';
+const VOLUME_KEY = 'qqmusic-listen-volume';
 const savedVolume = (() => {
   try {
-    const value = localStorage.getItem(VOLUME_KEY);
+    const value = clientStorage.getItem(VOLUME_KEY);
     const volume = value === null ? 1 : Number(value);
     return Number.isFinite(volume) && volume >= 0 && volume <= 1 ? volume : 1;
   } catch { return 1; }
 })();
 
-const MODES_KEY = 'hm-listen-modes';
+const MODES_KEY = 'qqmusic-listen-modes';
 const savedModes = ((): { shuffle: boolean; smart: boolean; repeat: RepeatMode } => {
   try {
-    const m = JSON.parse(localStorage.getItem(MODES_KEY) ?? 'null') as { shuffle?: unknown; smart?: unknown; repeat?: unknown } | null;
+    const m = JSON.parse(clientStorage.getItem(MODES_KEY) ?? 'null') as { shuffle?: unknown; smart?: unknown; repeat?: unknown } | null;
     return { shuffle: m?.shuffle === true, smart: m?.shuffle === true && m?.smart === true,
       repeat: m?.repeat === 'all' || m?.repeat === 'one' ? m.repeat : 'off' };
   } catch {
@@ -163,18 +164,18 @@ type OpenPlay = { ref: string; context: string; launch: Launch; started: boolean
 let played: OpenPlay | null = null;
 let OPEN_PLAY_KEY = (() => {
   try {
-    let tabId = sessionStorage.getItem('hm-listening-tab');
-    if (!tabId) { tabId = newEventId(); sessionStorage.setItem('hm-listening-tab', tabId); }
-    return `hm-open-play:${tabId}`;
-  } catch { return `hm-open-play:${newEventId()}`; }
+    let tabId = tabStorage.getItem('qqmusic-listening-tab');
+    if (!tabId) { tabId = newEventId(); tabStorage.setItem('qqmusic-listening-tab', tabId); }
+    return `qqmusic-open-play:${tabId}`;
+  } catch { return `qqmusic-open-play:${newEventId()}`; }
 })();
-const DEVICE_KEY = 'hm-listening-device';
+const DEVICE_KEY = 'qqmusic-listening-device';
 const deviceId = (() => {
   try {
-    const existing = localStorage.getItem(DEVICE_KEY);
+    const existing = clientStorage.getItem(DEVICE_KEY);
     if (existing) return existing;
     const id = newEventId();
-    localStorage.setItem(DEVICE_KEY, id);
+    clientStorage.setItem(DEVICE_KEY, id);
     return id;
   } catch { return newEventId(); }
 })();
@@ -194,7 +195,7 @@ function checkpoint() {
   const snapshot = { ref: p.ref, context: p.context, playback_id: p.playbackId, device_id: deviceId,
     listened_ms: Math.round(p.listenedMs), nd_song_id: p.ndSongId, track_metadata: metadata(), account: p.account, updated_ms: Date.now(),
     launch_id: p.launch.id, launch_origin: p.launch.origin };
-  try { localStorage.setItem(OPEN_PLAY_KEY, JSON.stringify(snapshot)); } catch (e) { console.error('Could not persist listening checkpoint', e); }
+  try { clientStorage.setItem(OPEN_PLAY_KEY, JSON.stringify(snapshot)); } catch (e) { console.error('Could not persist listening checkpoint', e); }
   playEvent('progress', { ref: p.ref, nd_song_id: p.ndSongId }, snapshot);
 }
 
@@ -203,9 +204,9 @@ type SavedPlay = { ref: string; context: string; playback_id: string; device_id:
 
 function recover(key: string) {
   try {
-    const old = JSON.parse(localStorage.getItem(key) ?? 'null') as SavedPlay | null;
+    const old = JSON.parse(clientStorage.getItem(key) ?? 'null') as SavedPlay | null;
     if (old?.ref && old.playback_id && old.device_id && old.account != null && Number.isFinite(old.listened_ms)) {
-      if (playEvent('interrupted', { ref: old.ref, nd_song_id: old.nd_song_id }, old)) localStorage.removeItem(key);
+      if (playEvent('interrupted', { ref: old.ref, nd_song_id: old.nd_song_id }, old)) clientStorage.removeItem(key);
     }
   } catch (e) { console.error('Could not recover listening checkpoint', e); }
 }
@@ -213,13 +214,16 @@ function recover(key: string) {
 let releaseTabLock: (() => void) | null = null;
 function scanAbandoned() {
   try {
-    const keys = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i))
-      .filter((key): key is string => !!key && key.startsWith('hm-open-play:') && key !== OPEN_PLAY_KEY);
+    const keys = Array.from({ length: clientStorage.length }, (_, i) => clientStorage.key(i))
+      .filter((key): key is string => !!key && key.startsWith('qqmusic-open-play:') && key !== OPEN_PLAY_KEY);
     for (const key of keys) {
       if (navigator.locks) {
-        void navigator.locks.request(key, { ifAvailable: true }, (lock) => { if (lock) recover(key); });
+        void navigator.locks.request(key, { ifAvailable: true }, async (lock) => {
+          if (lock) await navigator.locks.request(key.replace(/^qqmusic-/, 'hm-'), { ifAvailable: true },
+            (oldLock) => { if (oldLock) recover(key); });
+        });
       } else {
-        const old = JSON.parse(localStorage.getItem(key) ?? 'null') as SavedPlay | null;
+        const old = JSON.parse(clientStorage.getItem(key) ?? 'null') as SavedPlay | null;
         if (old?.updated_ms && Date.now() - old.updated_ms > 300_000) recover(key);
       }
     }
@@ -230,14 +234,23 @@ function lockTab() {
   if (!navigator.locks) { recover(OPEN_PLAY_KEY); scanAbandoned(); return; }
   void navigator.locks.request(OPEN_PLAY_KEY, { ifAvailable: true }, async (lock) => {
     if (!lock) {
-      OPEN_PLAY_KEY = `hm-open-play:${newEventId()}`;
-      try { sessionStorage.setItem('hm-listening-tab', OPEN_PLAY_KEY.slice('hm-open-play:'.length)); } catch {}
+      OPEN_PLAY_KEY = `qqmusic-open-play:${newEventId()}`;
+      try { tabStorage.setItem('qqmusic-listening-tab', OPEN_PLAY_KEY.slice('qqmusic-open-play:'.length)); } catch {}
       lockTab();
       return;
     }
-    recover(OPEN_PLAY_KEY);
-    scanAbandoned();
-    await new Promise<void>((resolve) => { releaseTabLock = resolve; });
+    // Hold the old lock too while an older bundle can still be open in another tab.
+    await navigator.locks.request(OPEN_PLAY_KEY.replace(/^qqmusic-/, 'hm-'), { ifAvailable: true }, async (oldLock) => {
+      if (!oldLock) {
+        OPEN_PLAY_KEY = `qqmusic-open-play:${newEventId()}`;
+        try { tabStorage.setItem('qqmusic-listening-tab', OPEN_PLAY_KEY.slice('qqmusic-open-play:'.length)); } catch {}
+        lockTab();
+        return;
+      }
+      recover(OPEN_PLAY_KEY);
+      scanAbandoned();
+      await new Promise<void>((resolve) => { releaseTabLock = resolve; });
+    });
   });
 }
 lockTab();
@@ -295,7 +308,7 @@ function reportEnd(ended = false, failed = false, interrupted = false) {
   const position = ended ? duration : state.position;
   const kind = interrupted ? 'interrupted' : failed ? 'error' : ended || (duration > 0 && position >= duration * FINISH_SHARE) ? 'finish' : 'skip';
   const persisted = playEvent(kind, { ref: p.ref, nd_song_id: p.ndSongId }, { position_s: position, duration_s: duration || null, context: p.context, playback_id: p.playbackId, device_id: deviceId, listened_ms: Math.round(p.listenedMs), track_metadata: metadata(), account: p.account, launch_id: p.launch.id, launch_origin: p.launch.origin });
-  if (persisted) try { localStorage.removeItem(OPEN_PLAY_KEY); } catch (e) { console.error('Could not close listening checkpoint', e); }
+  if (persisted) try { clientStorage.removeItem(OPEN_PLAY_KEY); } catch (e) { console.error('Could not close listening checkpoint', e); }
 }
 
 function el(): HTMLAudioElement {
@@ -445,7 +458,7 @@ function refreshInfo() {
 /** Asks the Hub to pick the next track's file now (it remembers the pick), so it starts at once. */
 function prefetchNext() {
   const connection = (navigator as Navigator & {connection?: {saveData?: boolean; effectiveType?: string}}).connection;
-  const enabled = (() => { try { return localStorage.getItem('qqmusic-warm') !== 'off'; } catch { return true; } })();
+  const enabled = (() => { try { return clientStorage.getItem('qqmusic-warm') !== 'off'; } catch { return true; } })();
   const warm = enabled && !connection?.saveData && !['2g','slow-2g'].includes(connection?.effectiveType ?? '');
   const refs = warm ? state.queue.slice(state.index + 1, state.index + 3).map((track) => track.ref) : [];
   void request('POST','/api/listen/prepare',{json:{refs}}).catch(()=>{});
@@ -607,7 +620,7 @@ export function listenAll(list: readonly ListenTrack[], opts: { shuffle?: boolea
 /** The queue in its own order while shuffle is on (tracks added since go after it when shuffle is turned off). */
 let unshuffled: readonly ListenTrack[] | null = null;
 
-const SESSION_KEY = 'hm-listen-session:';
+const SESSION_KEY = 'qqmusic-listen-session:';
 let sessionAccount: number | null = null;
 let lastSaved = 0;
 
@@ -631,14 +644,14 @@ function persistListening(force = false) {
   if (sessionAccount === null || (!force && Date.now() - lastSaved < 1000)) return;
   try {
     const key = SESSION_KEY + sessionAccount;
-    if (!state.track) localStorage.removeItem(key);
+    if (!state.track) clientStorage.removeItem(key);
     else {
       const saved: SavedSession = {
         version: 1, queue: [...state.queue], index: state.index, context: state.context, launch: listLaunch,
         position: state.position, autoplay: listenBusy(), shuffle: state.shuffle, smart: state.smart, repeat: state.repeat,
         originalOrder: unshuffled?.map((t) => state.queue.indexOf(t)).filter((i) => i >= 0) ?? null,
       };
-      localStorage.setItem(key, JSON.stringify(saved));
+      clientStorage.setItem(key, JSON.stringify(saved));
     }
     lastSaved = Date.now();
   } catch { /* Playback remains available when storage is full or disabled. */ }
@@ -651,7 +664,7 @@ export function restoreListening(account: number | null) {
   sessionAccount = account;
   if (account === null || canPlayAll()) return;
   try {
-    const saved = JSON.parse(localStorage.getItem(SESSION_KEY + account) ?? 'null') as SavedSession | null;
+    const saved = JSON.parse(clientStorage.getItem(SESSION_KEY + account) ?? 'null') as SavedSession | null;
     const validTrack = (t: ListenTrack) => t && typeof t.ref === 'string' && !!t.ref && typeof t.title === 'string' && typeof t.artist === 'string';
     if (!saved || saved.version !== 1 || !Array.isArray(saved.queue) || !saved.queue.length || !saved.queue.every(validTrack)
       || !Number.isInteger(saved.index) || saved.index < 0 || saved.index >= saved.queue.length
@@ -683,7 +696,7 @@ function setModes(patch: Partial<Pick<ListenState, 'shuffle' | 'repeat'>>) {
   set(patch);
   if (!state.shuffle) smartChosen = false;
   try {
-    localStorage.setItem(MODES_KEY, JSON.stringify({ shuffle: state.shuffle, smart: smartChosen, repeat: state.repeat }));
+    clientStorage.setItem(MODES_KEY, JSON.stringify({ shuffle: state.shuffle, smart: smartChosen, repeat: state.repeat }));
   } catch {
     /* the modes are just not remembered */
   }
@@ -907,7 +920,7 @@ export function setVolume(volume: number) {
   if (audio) audio.volume = value;
   if (fadingTail) fadingTail.volume = value;
   set({ volume: value });
-  try { localStorage.setItem(VOLUME_KEY, String(value)); } catch { /* storage is optional */ }
+  try { clientStorage.setItem(VOLUME_KEY, String(value)); } catch { /* storage is optional */ }
 }
 
 export function seek(seconds: number) {
@@ -954,7 +967,7 @@ export function markQueued(ref: string) {
 
 /** The app's player queued a download of a catalog track: «Скачать в библиотеку» — rows show «качается»; its ♥
  * (`star`) — only the ♥ shows it (`lib/stars.ts`). */
-export const HUB_DOWNLOAD_EVENT = 'hm:hub-download';
+export const HUB_DOWNLOAD_EVENT = 'qqmusic:hub-download';
 
 window.addEventListener(HUB_DOWNLOAD_EVENT, (e) => {
   const d = (e as CustomEvent<{ ref?: string; star?: boolean }>).detail;

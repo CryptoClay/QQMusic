@@ -75,7 +75,7 @@ class CatalogCfg(BaseModel):
     ttl_artist_s: int = 7 * 86400
     ttl_album_s: int = 7 * 86400
     ttl_search_s: int = 86400
-    musicbrainz_user_agent: str = "HomeMusic/0.1 (personal music server)"
+    musicbrainz_user_agent: str = "QQMusic/0.1 (personal music server)"
 
 
 class JobsCfg(BaseModel):

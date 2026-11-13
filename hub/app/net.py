@@ -35,7 +35,7 @@ class Priority:
         self.background = False
 
 
-_priority: contextvars.ContextVar[Priority | None] = contextvars.ContextVar("hm_priority", default=None)
+_priority: contextvars.ContextVar[Priority | None] = contextvars.ContextVar("qqmusic_priority", default=None)
 
 
 def in_background() -> bool:

@@ -17,10 +17,11 @@ type Bridge = {
 };
 
 /** The app's player started (sent by the app, and by `playSongs` right away): page listening stops. */
-export const NATIVE_PLAYING_EVENT = 'hm:native-playing';
+export const NATIVE_PLAYING_EVENT = 'qqmusic:native-playing';
 
 function bridge(): Bridge | undefined {
-  return (window as unknown as { HomeMusicAndroid?: Bridge }).HomeMusicAndroid;
+  const native = window as unknown as { QQMusicAndroid?: Bridge; HomeMusicAndroid?: Bridge };
+  return native.QQMusicAndroid ?? native.HomeMusicAndroid;
 }
 
 export function canPlay(): boolean {

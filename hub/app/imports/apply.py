@@ -1,4 +1,4 @@
-"""What a matched import row does in HomeMusic: ♥ in Navidrome, Navidrome playlists in the service's order, downloads.
+"""What a matched import row does in QQMusic: ♥ in Navidrome, Navidrome playlists in the service's order, downloads.
 
 - ♥: the Hub stars the import's liked songs itself, in the service's order (`sync_likes`): one by one from the oldest
   like, and a song downloaded later gets its place by starring the likes newer than it again. Likes are downloaded

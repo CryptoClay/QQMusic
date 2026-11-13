@@ -130,7 +130,7 @@ def make_client() -> AsyncOpenAI:
     host = httpx.URL(s.llm_base_url).host
     proxy = s.outbound_proxy if s.outbound_proxy and host in s.proxy_hosts else None
     http_client = httpx.AsyncClient(proxy=proxy, timeout=s.llm_timeout_s)
-    headers = {"HTTP-Referer": "https://github.com/homemusic", "X-Title": "QQMusic"}
+    headers = {"HTTP-Referer": "https://github.com/CryptoClay/QQMusic", "X-Title": "QQMusic"}
     return AsyncOpenAI(base_url=s.llm_base_url, api_key=s.llm_api_key or "none", timeout=s.llm_timeout_s,
                        max_retries=2, default_headers=headers, http_client=http_client)
 

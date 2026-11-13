@@ -2,7 +2,7 @@
 import { useMemo, useSyncExternalStore, type AnchorHTMLAttributes, type MouseEvent } from 'react';
 
 /** Fired by `navigate()` (pushState does not fire `hashchange`). */
-export const ROUTE_EVENT = 'hm:route';
+export const ROUTE_EVENT = 'qqmusic:route';
 
 function subscribe(cb: () => void) {
   window.addEventListener('hashchange', cb);

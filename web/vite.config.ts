@@ -9,15 +9,15 @@ import { mockApi } from './mock/plugin.ts';
 const here = fileURLToPath(new URL('.', import.meta.url));
 const outDir = resolve(here, '../hub/app/static');
 
-/** One id per build: the service worker cache, `<meta name="hm-build">` in index.html (the Hub reports it in
- * /healthz) and `__HM_BUILD__` in the bundle (lib/update.ts reloads the page when the Hub serves another one). */
+/** One id per build: the service worker cache, `<meta name="qqmusic-build">` in index.html (the Hub reports it in
+ * /healthz) and `__QQMUSIC_BUILD__` in the bundle (lib/update.ts reloads the page when the Hub serves another one). */
 const BUILD_ID = new Date().toISOString().replace(/[-:.TZ]/g, '');
 
 function buildId(): Plugin {
   return {
-    name: 'homemusic-build-id',
+    name: 'qqmusic-build-id',
     apply: 'build',
-    transformIndexHtml: () => [{ tag: 'meta', attrs: { name: 'hm-build', content: BUILD_ID }, injectTo: 'head' }],
+    transformIndexHtml: () => [{ tag: 'meta', attrs: { name: 'qqmusic-build', content: BUILD_ID }, injectTo: 'head' }],
     closeBundle() {
       const file = resolve(outDir, 'sw.js');
       if (!existsSync(file)) return;
@@ -26,11 +26,11 @@ function buildId(): Plugin {
   };
 }
 
-const backend = 'http://localhost:8080';
+const backend = process.env.QQMUSIC_DEV_BACKEND ?? 'http://localhost:8081';
 
 export default defineConfig(({ command, mode }) => ({
   plugins: [react(), tailwindcss(), buildId(), ...(mode === 'mock' ? [mockApi()] : [])],
-  define: { __HM_BUILD__: JSON.stringify(command === 'build' ? BUILD_ID : 'dev') },
+  define: { __QQMUSIC_BUILD__: JSON.stringify(command === 'build' ? BUILD_ID : 'dev') },
   build: {
     outDir,
     emptyOutDir: true,

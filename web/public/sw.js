@@ -1,12 +1,12 @@
-/* HomeMusic service worker: app shell cache, Web Share Target, notification clicks.
+/* QQMusic service worker: app shell cache, Web Share Target, notification clicks.
    Never caches /api/*. BUILD_ID is stamped by vite.config.ts at build time. */
 const BUILD_ID = '__BUILD_ID__';
-const SHELL = `hm-shell-${BUILD_ID}`;
-const ASSETS = 'hm-assets-v1'; // hashed file names: safe to keep across builds
+const SHELL = `qqmusic-shell-${BUILD_ID}`;
+const ASSETS = 'qqmusic-assets-v1'; // hashed file names: safe to keep across builds
 const SHELL_URLS = ['/', '/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png', '/icons/badge-96.png'];
 
 // Same layout as src/lib/shareStore.ts
-const SHARE_DB = 'homemusic-share';
+const SHARE_DB = 'qqmusic-share';
 const SHARE_STORE = 'shares';
 const SHARE_KEY = 'pending';
 
@@ -33,7 +33,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
       const keep = new Set([SHELL, ASSETS]);
-      for (const key of await caches.keys()) if (!keep.has(key)) await caches.delete(key);
+      for (const key of await caches.keys()) if (/^(?:qqmusic|hm)-(?:shell|assets)-/.test(key) && !keep.has(key)) await caches.delete(key);
       await self.clients.claim();
     })(),
   );

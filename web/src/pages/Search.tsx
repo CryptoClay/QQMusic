@@ -139,12 +139,12 @@ function RecentSearches({ onPick, hideEmpty = false }: { onPick: (q: string) => 
   useEffect(() => {
     const wake = () => { if (document.visibilityState === 'visible') res.reload(true); };
     document.addEventListener('visibilitychange', wake);
-    window.addEventListener('hm:resume', wake);
+    window.addEventListener('qqmusic:resume', wake);
     window.addEventListener('focus', wake);
     window.addEventListener('online', wake);
     return () => {
       document.removeEventListener('visibilitychange', wake);
-      window.removeEventListener('hm:resume', wake);
+      window.removeEventListener('qqmusic:resume', wake);
       window.removeEventListener('focus', wake);
       window.removeEventListener('online', wake);
     };

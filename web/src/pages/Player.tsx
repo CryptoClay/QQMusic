@@ -154,7 +154,7 @@ export function PlayerPage() {
       <div className="px-6 pt-4">
         <input
           type="range"
-          className="hm-range w-full"
+          className="qqmusic-range w-full"
           aria-label="Перемотка"
           min={0}
           max={Math.max(1, Math.round(duration))}
@@ -215,7 +215,7 @@ export function PlayerPage() {
       {desktop && (
         <div className="mx-6 mt-4 flex items-center gap-3 text-muted">
           <Icon name="volume" size={19} />
-          <input type="range" className="hm-range min-w-0 flex-1" aria-label="Громкость" aria-valuetext={`${Math.round(volume * 100)}%`}
+          <input type="range" className="qqmusic-range min-w-0 flex-1" aria-label="Громкость" aria-valuetext={`${Math.round(volume * 100)}%`}
             min={0} max={100} step={1} value={Math.round(volume * 100)}
             style={{ '--p': `${volume * 100}%` } as CSSProperties}
             onChange={(e) => setVolume(Number(e.target.value) / 100)} />

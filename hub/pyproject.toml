@@ -1,7 +1,7 @@
 [project]
-name = "homemusic-hub"
+name = "qqmusic-hub"
 version = "0.1.0"
-description = "HomeMusic Hub: catalog, downloaders, uploads, tagging and AI assistant on top of Navidrome"
+description = "QQMusic server: catalog, library, playback and downloads on top of Navidrome"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "fastapi==0.145.0",

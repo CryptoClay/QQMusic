@@ -17,7 +17,7 @@ from app.config import get_settings
 log = logging.getLogger(__name__)
 
 API_VERSION = "1.16.1"
-CLIENT_NAME = "homemusic-hub"
+CLIENT_NAME = "qqmusic-hub"
 
 
 class SubsonicError(Exception):

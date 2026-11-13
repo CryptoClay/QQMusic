@@ -11,4 +11,9 @@ eval
 data
 .env
 config.yaml
+.agent-work
+android
+.youtube-cookies.txt
+design-review
+design-preview
 gateway/tunnel/tunnel_key*

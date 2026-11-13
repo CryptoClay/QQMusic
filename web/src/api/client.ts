@@ -83,7 +83,7 @@ export class ApiError extends Error {
 }
 
 /** Fired when the server answers 401: the app switches to the login screen. */
-export const UNAUTHORIZED_EVENT = 'hm:unauthorized';
+export const UNAUTHORIZED_EVENT = 'qqmusic:unauthorized';
 
 function onUnauthorized(path: string) {
   if (!path.startsWith('/api/auth/login') && !path.startsWith('/api/auth/register') && !path.startsWith('/api/auth/email/')) window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));

@@ -89,7 +89,7 @@ export function MusicSettingsPage() {
                   min={-12}
                   max={12}
                   step={1}
-                  className="hm-range min-w-0 flex-1"
+                  className="qqmusic-range min-w-0 flex-1"
                   disabled={!value.eq_enabled}
                   value={value.eq_gains[i]}
                   onChange={(e) =>
@@ -127,7 +127,7 @@ export function MusicSettingsPage() {
           </p>
           <Field label={`Плавный переход: ${value.crossfade_s} сек.`}>
             <input
-              className="hm-range w-full"
+              className="qqmusic-range w-full"
               type="range"
               min={0}
               max={10}

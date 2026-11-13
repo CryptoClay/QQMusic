@@ -138,10 +138,10 @@ export function LikedPage() {
     const wake = () => { if (document.visibilityState === 'visible') res.reload(true); };
     const changed = () => res.reload(true);
     document.addEventListener('visibilitychange', wake);
-    window.addEventListener('hm:hub-favorite', changed);
+    window.addEventListener('qqmusic:hub-favorite', changed);
     return () => {
       document.removeEventListener('visibilitychange', wake);
-      window.removeEventListener('hm:hub-favorite', changed);
+      window.removeEventListener('qqmusic:hub-favorite', changed);
     };
   }, [res.reload]);
   const [q, setQ] = useState('');

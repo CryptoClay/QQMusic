@@ -1,3 +1,4 @@
+import { clientStorage } from './storage';
 import { useSyncExternalStore } from 'react';
 import { ApiError, api, errorMessage } from '../api/client';
 import type { PlayEventIn, WaveOrigin, WaveOut, WaveSeedIn, WaveTrackOut } from '../api/types';
@@ -44,7 +45,7 @@ interface Session {
 
 let session: Session | null = null;
 let sessionAccount: number | null = null;
-const SESSION_KEY = 'hm-wave-session:';
+const SESSION_KEY = 'qqmusic-wave-session:';
 let starting: string | null = null; // the seed being started ('' — the user's own wave)
 const subscribers = new Set<() => void>();
 let snapshot: { title: string | null; starting: string | null } = { title: null, starting: null };
@@ -59,8 +60,8 @@ function persistWave() {
   if (sessionAccount === null) return;
   try {
     const key = SESSION_KEY + sessionAccount;
-    if (!session) localStorage.removeItem(key);
-    else localStorage.setItem(key, JSON.stringify({ id: session.id, title: session.title,
+    if (!session) clientStorage.removeItem(key);
+    else clientStorage.setItem(key, JSON.stringify({ id: session.id, title: session.title,
       refs: [...session.refs], songs: [...session.songs], pending: [...session.inFlight, ...session.pending] }));
   } catch { /* The current wave can still play without storage. */ }
 }
@@ -74,7 +75,7 @@ export function restoreWave(account: number | null) {
   if (account !== null && !canPlayAll() && st.track && st.context.startsWith('wave:')) {
     const id = st.context.slice('wave:'.length);
     let saved: { id?: string; title?: string; refs?: string[]; songs?: string[]; pending?: PlayEventIn[] } | null = null;
-    try { saved = JSON.parse(localStorage.getItem(SESSION_KEY + account) ?? 'null'); } catch { /* rebuild from the queue */ }
+    try { saved = JSON.parse(clientStorage.getItem(SESSION_KEY + account) ?? 'null'); } catch { /* rebuild from the queue */ }
     if (saved?.id !== id) saved = null;
     session = { id, title: typeof saved?.title === 'string' ? saved.title : 'Моя волна', context: st.context,
       refs: new Set([...(Array.isArray(saved?.refs) ? saved.refs.filter((r) => typeof r === 'string') : []), ...st.queue.map((t) => t.ref)]),

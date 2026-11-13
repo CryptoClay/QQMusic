@@ -1,3 +1,4 @@
+import { clientStorage } from '../lib/storage';
 import { useEffect, useState, type ReactNode } from 'react';
 import { request } from '../api/client';
 import { useDesktop } from '../lib/desktop';
@@ -28,8 +29,8 @@ export function MorePage() {
   const [canInstall, setCanInstall] = useState(!!deferredInstall);
   const smart = useSmartEnabled();
   const desktop = useDesktop();
-  const [warm, setWarm] = useState(() => { try { return localStorage.getItem('qqmusic-warm') !== 'off'; } catch { return true; } });
-  const toggleWarm = () => { const next=!warm; setWarm(next); try {localStorage.setItem('qqmusic-warm',next?'on':'off');} catch {} if(!next)void request('POST','/api/listen/prepare',{json:{refs:[]}}).catch(()=>{}); };
+  const [warm, setWarm] = useState(() => { try { return clientStorage.getItem('qqmusic-warm') !== 'off'; } catch { return true; } });
+  const toggleWarm = () => { const next=!warm; setWarm(next); try {clientStorage.setItem('qqmusic-warm',next?'on':'off');} catch {} if(!next)void request('POST','/api/listen/prepare',{json:{refs:[]}}).catch(()=>{}); };
   const standalone = window.matchMedia('(display-mode: standalone)').matches;
 
   useEffect(() => {

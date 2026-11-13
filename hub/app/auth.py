@@ -14,7 +14,8 @@ from app.library.navidrome import AuthError, NavidromeClient
 from app.models import Session, User, utcnow
 from app.security import decrypt, encrypt, hash_token, new_token
 
-COOKIE = "hm_session"
+COOKIE = "qqmusic_session"
+LEGACY_COOKIE = "hm_session"
 SEEN_EVERY = timedelta(minutes=5)  # how often a request refreshes User.last_seen_at (admin's user list)
 
 
@@ -58,14 +59,15 @@ def set_session_cookie(request: Request, response: Response, token: str) -> None
 
 
 async def logout(s: AsyncSession, request: Request, response: Response) -> None:
-    token = request.cookies.get(COOKIE)
-    if token:
-        await s.execute(delete(Session).where(Session.id == hash_token(token)))
-    response.delete_cookie(COOKIE, path="/")
+    for name in (COOKIE, LEGACY_COOKIE):
+        token = request.cookies.get(name)
+        if token:
+            await s.execute(delete(Session).where(Session.id == hash_token(token)))
+        response.delete_cookie(name, path="/")
 
 
-async def current_user(request: Request, s: AsyncSession = Depends(get_session, scope="function")) -> User:
-    token = request.cookies.get(COOKIE)
+async def current_user(request: Request, response: Response, s: AsyncSession = Depends(get_session, scope="function")) -> User:
+    token = request.cookies.get(COOKIE) or request.cookies.get(LEGACY_COOKIE)
     if not token:
         raise HTTPException(401, "Требуется вход")
     sess = await s.get(Session, hash_token(token))
@@ -74,6 +76,9 @@ async def current_user(request: Request, s: AsyncSession = Depends(get_session, 
     user = await s.get(User, sess.user_id)
     if user is None:
         raise HTTPException(401, "Требуется вход")
+    if not request.cookies.get(COOKIE):
+        set_session_cookie(request, response, token)
+        response.delete_cookie(LEGACY_COOKIE, path="/")
     now = utcnow()
     if user.last_seen_at is None or now - user.last_seen_at > SEEN_EVERY:
         user.last_seen_at = now

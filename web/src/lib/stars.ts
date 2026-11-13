@@ -153,7 +153,7 @@ export async function toggleLike(t: LikeTarget): Promise<void> {
     }
     retries.delete(key);
     if (!liked && t.ref) pendingRefs.delete(t.ref);
-    window.dispatchEvent(new CustomEvent('hm:hub-favorite', { detail: { ref: t.ref, star: liked } }));
+    window.dispatchEvent(new CustomEvent('qqmusic:hub-favorite', { detail: { ref: t.ref, star: liked } }));
     toast(liked ? 'Добавлено в понравившиеся' : 'Убрано из понравившихся', 'success');
   } catch (e) {
     if (generation !== epoch) return;
@@ -177,7 +177,7 @@ window.addEventListener(HUB_DOWNLOAD_EVENT, (e) => {
   const d = (e as CustomEvent<{ ref?: string; star?: boolean }>).detail;
   if (d?.ref && d.star) markLikePending(d.ref);
 });
-window.addEventListener('hm:hub-favorite', (e) => {
+window.addEventListener('qqmusic:hub-favorite', (e) => {
   const d = (e as CustomEvent<{ ref?: string; star?: boolean }>).detail;
   if (d?.ref && !d.star) pendingRefs.delete(d.ref);
   emit();

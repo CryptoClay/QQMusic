@@ -235,7 +235,7 @@ async def test_extract_from_images_request_shape_and_merge() -> None:
     img = user_msg["content"][1]
     assert img["type"] == "image_url" and img["image_url"]["url"].startswith("data:image/png;base64,")
     assert req.headers["authorization"] == "Bearer test-key"
-    assert req.headers["http-referer"] == "https://github.com/homemusic"
+    assert req.headers["http-referer"] == "https://github.com/CryptoClay/QQMusic"
     assert req.headers["x-title"] == "QQMusic"
 
     # the same two rows on both screenshots are deduplicated

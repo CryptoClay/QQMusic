@@ -1,4 +1,4 @@
-# HomeMusic Hub settings that are not secrets. Copy to config.yaml (mounted read-only into the hub container).
+# QQMusic Hub settings that are not secrets. Copy to config.yaml (mounted read-only into the hub container).
 
 sources:
   # Order of providers for downloads and listening. "ru" is used when artist/title contains Cyrillic, the user asked
@@ -56,7 +56,7 @@ catalog:
   ttl_artist_s: 604800   # 7 days
   ttl_album_s: 604800
   ttl_search_s: 86400    # 1 day
-  musicbrainz_user_agent: "HomeMusic/0.1 (you@example.com)"
+  musicbrainz_user_agent: "QQMusic/0.1 (you@example.com)"
 
 jobs:
   workers: 3

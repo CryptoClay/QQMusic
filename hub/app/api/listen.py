@@ -87,7 +87,7 @@ async def preview(ref: str, request: Request, user: User = Depends(current_user)
     except listen.ListenError as e:
         raise HTTPException(e.status, str(e)) from e
     headers = {**media.headers, "accept-ranges": "bytes", "cache-control": "no-store",
-               "X-HomeMusic-Listen-Kind": "preview"}
+               "X-QQMusic-Listen-Kind": "preview", "X-HomeMusic-Listen-Kind": "preview"}
     if media.body is None:
         return Response(status_code=media.status, headers=headers)
     return StreamingResponse(media.body, status_code=media.status, headers=headers, media_type=media.media_type,
@@ -103,7 +103,7 @@ async def stream(ref: str, request: Request, q: str | None = None, full: bool = 
     rng = request.headers.get("range") or ""
     # the app loads the next tracks of its queue ahead (`X-HomeMusic-Prefetch`): that is no listen yet, its
     # `start` event is (app/api/plays.py), and its server copy waits for those of played tracks
-    ahead = request.headers.get("x-homemusic-prefetch") == "1"
+    ahead = request.headers.get("x-qqmusic-prefetch", request.headers.get("x-homemusic-prefetch")) == "1"
     try:
         selected = await _choose(ref, full_only=full, user=user, background=ahead)
         m = await listen.open_media(selected.ref, rng or None, ahead=ahead, quality=q, full_only=full)
@@ -113,8 +113,9 @@ async def stream(ref: str, request: Request, q: str | None = None, full: bool = 
         from app.imports.core import listened
 
         await listened(user.id, ref)  # a track of an economy import is downloaded once listened to
-    variant = {"X-HomeMusic-Listen-Kind": m.choice.kind}
+    variant = {"X-QQMusic-Listen-Kind": m.choice.kind, "X-HomeMusic-Listen-Kind": m.choice.kind}
     if m.variant:
+        variant["X-QQMusic-Variant"] = m.variant
         variant["X-HomeMusic-Variant"] = m.variant
     if m.path is not None:
         return FileResponse(m.path, media_type=m.media_type, headers={"Cache-Control": "no-store", **variant})

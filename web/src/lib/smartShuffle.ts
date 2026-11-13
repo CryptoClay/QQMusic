@@ -1,3 +1,4 @@
+import { clientStorage } from './storage';
 import { useEffect, useSyncExternalStore } from 'react';
 import { ApiError, api, errorMessage } from '../api/client';
 import type { PlayEventIn, SmartOut, SmartRecOut } from '../api/types';
@@ -30,7 +31,7 @@ import { toast, toastError } from './ui';
  * itself is never changed. A recommendation is told by `ListenTrack.rec` (✨ and the line «Рекомендация на основе …»);
  * «+» puts it in the list (in «Понравившиеся» — ♥), «−» skips it and the Hub never recommends it in this list again. */
 
-const SETTING_KEY = 'hm-smart-shuffle';
+const SETTING_KEY = 'qqmusic-smart-shuffle';
 
 const subscribers = new Set<() => void>();
 const emit = () => subscribers.forEach((fn) => fn());
@@ -44,7 +45,7 @@ const subscribe = (fn: () => void) => {
 /** «Умное перемешивание в режимах»: on by default (off — the button goes between shuffle and off only). */
 export function smartEnabled(): boolean {
   try {
-    return localStorage.getItem(SETTING_KEY) !== '0';
+    return clientStorage.getItem(SETTING_KEY) !== '0';
   } catch {
     return true;
   }
@@ -52,7 +53,7 @@ export function smartEnabled(): boolean {
 
 export function setSmartEnabled(on: boolean) {
   try {
-    localStorage.setItem(SETTING_KEY, on ? '1' : '0');
+    clientStorage.setItem(SETTING_KEY, on ? '1' : '0');
   } catch {
     /* the choice is just not remembered */
   }

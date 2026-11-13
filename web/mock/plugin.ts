@@ -918,7 +918,7 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<boolea
   const url = new URL(req.url ?? '/', 'http://x');
   const p = decodeURIComponent(url.pathname);
   const m = req.method ?? 'GET';
-  const authed = (req.headers.cookie ?? '').includes('hm_session=mock');
+  const authed = (req.headers.cookie ?? '').includes('qqmusic_session=mock');
 
   if (p.startsWith('/mock-cover/')) {
     send(res, 200, coverSvg(p.slice(12).replace(/\.svg$/, '')), 'image/svg+xml');
@@ -932,7 +932,7 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<boolea
   if (p === '/api/auth/login' && m === 'POST') {
     const b = await readJson(req);
     if (!b.username || b.password !== 'test') return send(res, 401, { detail: 'Неверный логин или пароль' }), true;
-    res.setHeader('Set-Cookie', 'hm_session=mock; Path=/; HttpOnly; SameSite=Lax');
+    res.setHeader('Set-Cookie', 'qqmusic_session=mock; Path=/; HttpOnly; SameSite=Lax');
     return send(res, 200, { id: 1, username: String(b.username), is_admin: true, public_music_url: 'https://203.0.113.10:8444' }), true;
   }
   if (p === '/api/auth/options') return send(res, 200, { invites: true, email_signup: true, google_client_id: null }), true;
@@ -946,7 +946,7 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<boolea
     const b = await readJson(req);
     if (String(b.code ?? '').replace(/\D/g, '') !== '123456') return send(res, 400, { detail: 'Неверный код: осталось попыток — 4' }), true;
     if (String(b.password ?? '').length < 6) return send(res, 400, { detail: 'Пароль — не короче 6 символов' }), true;
-    res.setHeader('Set-Cookie', 'hm_session=mock; Path=/; HttpOnly; SameSite=Lax');
+    res.setHeader('Set-Cookie', 'qqmusic_session=mock; Path=/; HttpOnly; SameSite=Lax');
     return send(res, 200, { id: 6, username: String(b.username), is_admin: false, email: String(b.email).trim().toLowerCase(), public_music_url: 'https://203.0.113.10:8444' }), true;
   }
   if (p === '/api/auth/register' && m === 'POST') {
@@ -956,7 +956,7 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<boolea
     if (!inv) return send(res, 400, { detail: 'Код приглашения не подходит: проверьте его или попросите новый' }), true;
     if (String(b.password ?? '').length < 6) return send(res, 400, { detail: 'Пароль — не короче 6 символов' }), true;
     Object.assign(inv, { status: 'used', used_at: now().slice(0, 19), used_by: String(b.username) });
-    res.setHeader('Set-Cookie', 'hm_session=mock; Path=/; HttpOnly; SameSite=Lax');
+    res.setHeader('Set-Cookie', 'qqmusic_session=mock; Path=/; HttpOnly; SameSite=Lax');
     return send(res, 200, { id: 5, username: String(b.username), is_admin: false, public_music_url: 'https://203.0.113.10:8444' }), true;
   }
   if (!authed) return send(res, 401, { detail: 'Требуется вход' }), true;
@@ -1068,7 +1068,7 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<boolea
 
   if (p === '/api/auth/me') return send(res, 200, { id: 1, username: 'owner', is_admin: true, public_music_url: 'https://203.0.113.10:8444', public_hub_url: 'https://203.0.113.10:8445' }), true;
   if (p === '/api/auth/logout') {
-    res.setHeader('Set-Cookie', 'hm_session=; Path=/; Max-Age=0');
+    res.setHeader('Set-Cookie', 'qqmusic_session=; Path=/; Max-Age=0');
     return send(res, 200, { ok: true }), true;
   }
 
@@ -1769,7 +1769,7 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<boolea
 
 export function mockApi(): Plugin {
   return {
-    name: 'homemusic-mock-api',
+    name: 'qqmusic-mock-api',
     configureServer(server) {
       // Seed one task that waits for confirmation (for screenshots).
       const seeded: Task = { id: ++taskSeq, status: 'awaiting_confirmation', input_kind: 'images', source_app: 'yandex_music', page_type: 'playlist', context: { playlist_name: 'Вечерний плейлист' }, rows: assistantRows(), suggested_playlist_name: 'Вечерний плейлист', confirm_token: 'tok-seed', cost_usd: 0.0007, created_at: now() };

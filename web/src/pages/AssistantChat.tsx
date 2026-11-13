@@ -1,3 +1,4 @@
+import { tabStorage } from '../lib/storage';
 // Free chat with the assistant (stage 3.8): POST /api/assistant/chat with the whole visible history.
 // The assistant changes ♥, playlists and downloads itself (`done`); deleting asks for a tap here.
 // The Hub saves every turn into a chat (`/api/assistant/chats`): the open chat lives in the route (`?chat=<id>`)
@@ -64,8 +65,8 @@ function update(patch: Partial<ChatState> | ((s: ChatState) => Partial<ChatState
 
 function remember(id: number | null) {
   try {
-    if (id) sessionStorage.setItem(CURRENT_KEY, String(id));
-    else sessionStorage.removeItem(CURRENT_KEY);
+    if (id) tabStorage.setItem(CURRENT_KEY, String(id));
+    else tabStorage.removeItem(CURRENT_KEY);
   } catch {
     /* storage unavailable: the route still holds the chat */
   }
@@ -75,7 +76,7 @@ function remember(id: number | null) {
 export function currentChatId(): number | null {
   if (state.id) return state.id;
   try {
-    return Number(sessionStorage.getItem(CURRENT_KEY)) || null;
+    return Number(tabStorage.getItem(CURRENT_KEY)) || null;
   } catch {
     return null;
   }
@@ -122,7 +123,7 @@ export function forgetChat(id: number) {
 
 let draft: { text: string; images: File[] } | null = null;
 
-/** Opens a new chat with a message ready to send (Android "Share" → HomeMusic). */
+/** Opens a new chat with a message ready to send (Android "Share" → QQMusic). */
 export function startChatWith(text: string, images: File[] = []) {
   newChat();
   draft = { text, images: images.slice(0, MAX_IMAGES) };

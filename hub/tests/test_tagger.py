@@ -159,8 +159,8 @@ def test_canonical_roundtrip() -> None:
     c = _to_canonical(t)
     assert c["ITUNESADVISORY"] == ["1"]
     assert c["ARTISTS"] == ["Кино", "Гость"]
-    assert c["HOMEMUSIC_ACQUIRED"] == ["2026-10-18T12:30:00"]
-    assert c["HOMEMUSIC_SOURCE_DATE"] == ["2019-05-01"]
+    assert c["QQMUSIC_ACQUIRED"] == ["2026-10-18T12:30:00"]
+    assert c["QQMUSIC_SOURCE_DATE"] == ["2019-05-01"]
     back = TagData(**_from_canonical(c))
     assert back == t
 
@@ -168,7 +168,7 @@ def test_canonical_roundtrip() -> None:
 def test_from_canonical_foreign_values() -> None:
     v = _from_canonical({
         "TRACKNUMBER": ["3/12"], "DISCNUMBER": ["2"], "DATE": ["1999-07-01T00:00:00"], "ITUNESADVISORY": ["2"],
-        "RELEASETYPE": ["Album"], "ARTIST": ["A", "B"], "DEEZER_TRACK_ID": ["abc"], "HOMEMUSIC_ACQUIRED": ["junk"],
+        "RELEASETYPE": ["Album"], "ARTIST": ["A", "B"], "DEEZER_TRACK_ID": ["abc"], "QQMUSIC_ACQUIRED": ["junk"],
     })
     assert v["track_no"] == 3 and v["track_total"] == 12 and v["disc_no"] == 2
     assert v["date"] == "1999-07-01"
@@ -294,7 +294,7 @@ def test_mp3_is_id3v24_utf8(audio_dir: Path, tmp_path: Path) -> None:
     assert tags.version[:2] == (2, 4)
     assert tags["TIT2"].encoding == 3
     assert str(tags["TRCK"]) == "1/11" and str(tags["TPOS"]) == "1/1"
-    assert tags["TXXX:HOMEMUSIC_TRACK_ID"].text == [t.track_uid]
+    assert tags["TXXX:QQMUSIC_TRACK_ID"].text == [t.track_uid]
     assert tags["TXXX:ITUNESADVISORY"].text == ["1"]
     assert tags["TXXX:MusicBrainz Album Type"].text == ["album"]
     assert tags["TXXX:ARTISTS"].text == ["Кино", "Гость"]
@@ -312,7 +312,7 @@ def test_m4a_atoms(audio_dir: Path, tmp_path: Path) -> None:
     tags = MP4(p).tags
     assert tags["©nam"] == ["Группа крови"] and tags["aART"] == ["Кино"]
     assert tags["trkn"] == [(1, 11)] and tags["rtng"] == [2]
-    assert bytes(tags["----:com.apple.iTunes:HOMEMUSIC_TRACK_ID"][0]).decode() == t.track_uid
+    assert bytes(tags["----:com.apple.iTunes:QQMUSIC_TRACK_ID"][0]).decode() == t.track_uid
     assert [bytes(v).decode() for v in tags["----:com.apple.iTunes:ARTISTS"]] == ["Кино", "Гость"]
     assert len(tags["covr"]) == 1
 
@@ -329,8 +329,21 @@ def test_vorbis_keys(audio_dir: Path, tmp_path: Path, ext: str) -> None:
     assert f.tags["ARTISTS"] == ["Кино", "Гость"]
     assert f.tags["TRACKNUMBER"] == ["1"] and f.tags["TRACKTOTAL"] == ["11"]
     assert f.tags["RELEASETYPE"] == ["album"] and f.tags["ITUNESADVISORY"] == ["1"]
-    assert f.tags["HOMEMUSIC_ALBUM_ID"] == [t.album_uid]
+    assert f.tags["QQMUSIC_ALBUM_ID"] == [t.album_uid]
     if ext == "flac":
         assert len(f.pictures) == 1 and f.pictures[0].type == 3 and f.pictures[0].width == 300
     else:
         assert len(f.tags["METADATA_BLOCK_PICTURE"]) == 1
+
+
+def test_legacy_custom_tags_keep_uuid_and_new_tags_take_precedence():
+    old = _from_canonical({"HOMEMUSIC_TRACK_ID": ["old-track"], "HOMEMUSIC_ALBUM_ID": ["old-album"],
+                           "HOMEMUSIC_SOURCE": ["youtube"]})
+    assert old["track_uid"] == "old-track" and old["album_uid"] == "old-album"
+    assert old["source"] == "youtube"
+    mixed = _from_canonical({"HOMEMUSIC_TRACK_ID": ["old-track"], "QQMUSIC_TRACK_ID": ["same-uuid"]})
+    assert mixed["track_uid"] == "same-uuid"
+    written = _to_canonical(TagData(title="T", artist="A", **old))
+    assert written["QQMUSIC_TRACK_ID"] == ["old-track"]
+    assert written["QQMUSIC_ALBUM_ID"] == ["old-album"]
+    assert "HOMEMUSIC_TRACK_ID" not in written

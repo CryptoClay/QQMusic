@@ -4,7 +4,7 @@ All functions here are synchronous (file I/O + CPU); async callers wrap them in 
 
 Tags are kept in a canonical Vorbis-comment-like form (`{"TITLE": ["..."], ...}`) and mapped to/from
 ID3v2.4 (mp3, wav, aiff), MP4 atoms (m4a) and Vorbis comments (flac, ogg vorbis, ogg opus).
-`HOMEMUSIC_TRACK_ID` / `HOMEMUSIC_ALBUM_ID` are what Navidrome uses as persistent IDs (navidrome.toml).
+`QQMUSIC_TRACK_ID` / `QQMUSIC_ALBUM_ID` are what Navidrome uses as persistent IDs (navidrome.toml).
 """
 
 from __future__ import annotations
@@ -34,12 +34,12 @@ _RELEASE_TYPES = {"album", "single", "ep", "compilation"}
 
 # TagData field -> custom tag name (TXXX desc / MP4 freeform name / Vorbis key)
 CUSTOM_FIELDS: dict[str, str] = {
-    "track_uid": "HOMEMUSIC_TRACK_ID",
-    "album_uid": "HOMEMUSIC_ALBUM_ID",
-    "source": "HOMEMUSIC_SOURCE",
-    "source_url": "HOMEMUSIC_SOURCE_URL",
-    "source_date": "HOMEMUSIC_SOURCE_DATE",
-    "acquired": "HOMEMUSIC_ACQUIRED",
+    "track_uid": "QQMUSIC_TRACK_ID",
+    "album_uid": "QQMUSIC_ALBUM_ID",
+    "source": "QQMUSIC_SOURCE",
+    "source_url": "QQMUSIC_SOURCE_URL",
+    "source_date": "QQMUSIC_SOURCE_DATE",
+    "acquired": "QQMUSIC_ACQUIRED",
     "deezer_track_id": "DEEZER_TRACK_ID",
     "deezer_album_id": "DEEZER_ALBUM_ID",
 }
@@ -214,7 +214,7 @@ def _from_canonical(c: dict[str, list[str]]) -> dict[str, Any]:
         out["explicit"] = explicit
 
     for field, key in CUSTOM_FIELDS.items():
-        v = first(key)
+        v = first(key) or first(key.replace("QQMUSIC_", "HOMEMUSIC_"))
         if v is None:
             continue
         if field == "source_date":
@@ -501,7 +501,9 @@ def read_tags(path: Path) -> dict[str, Any]:
         "duration_s": float(length) if length else None,
         "has_cover": bool(cover),
         "explicit": v.get("explicit"),
-        "homemusic_track_id": v.get("track_uid"),
+        "qqmusic_track_id": v.get("track_uid"),
+        "homemusic_track_id": v.get("track_uid"),  # legacy API consumers
+        "qqmusic_album_id": v.get("album_uid"),
         "homemusic_album_id": v.get("album_uid"),
         "source": v.get("source"),
         "source_url": v.get("source_url"),
