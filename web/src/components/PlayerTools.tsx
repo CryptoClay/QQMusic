@@ -1,3 +1,4 @@
+import { newUuid } from '../lib/uuid';
 import { useEffect, useState } from 'react';
 import { request, withQuery } from '../api/client';
 import { useAsync, useDebounced, useInterval } from '../lib/hooks';
@@ -196,7 +197,7 @@ function DeviceControls() {
     setBusy(true);
     const result = await attempt(() =>
       request<CommandStatus>('POST', `/api/player/devices/${selected}/commands`, {
-        json: { request_id: crypto.randomUUID(), action, ...payload },
+        json: { request_id: newUuid(), action, ...payload },
       }),
     );
     setBusy(false);

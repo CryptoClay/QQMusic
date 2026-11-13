@@ -1,3 +1,4 @@
+import { newUuid } from './uuid';
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { request } from '../api/client';
 import {
@@ -24,7 +25,7 @@ import { toastError } from './ui';
 import type { Song } from './community';
 import { parseTime } from './format';
 
-export const remoteDevice = `${listeningDevice()}-${crypto.randomUUID()}`;
+export const remoteDevice = `${listeningDevice()}-${newUuid()}`;
 let enabled = false;
 let name = window.matchMedia('(pointer: coarse)').matches ? 'Телефон' : 'Компьютер';
 const listeners = new Set<() => void>();
