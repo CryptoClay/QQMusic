@@ -52,6 +52,7 @@ export function MusicTrack({
   onSeek,
   playedRef,
   resolvedKey,
+  immersive = false,
 }: {
   refId: string;
   artist: string;
@@ -61,6 +62,7 @@ export function MusicTrack({
   onSeek?: (time: number) => void;
   playedRef?: string;
   resolvedKey?: string;
+  immersive?: boolean;
 }) {
   const { me } = useSession();
   const res = useAsync(
@@ -192,9 +194,9 @@ export function MusicTrack({
     setBusy(false);
   };
   return (
-    <section className="space-y-4 rounded-2xl border border-line bg-surface p-4" aria-label="Текст, версия и заметки">
+    <section className={immersive ? 'space-y-5 p-5' : 'space-y-4 rounded-2xl border border-line bg-surface p-4'} aria-label="Текст, версия и заметки">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-semibold">Текст и версия трека</h2>
+        <h2 className="font-semibold">{immersive ? 'Текст песни' : 'Текст и версия трека'}</h2>
         <Button small disabled={!res.data || res.loading} onClick={begin}>
           {edit ? 'Закрыть редактор' : 'Текст и заметки'}
         </Button>
@@ -210,7 +212,7 @@ export function MusicTrack({
               {labels[res.data.version.status] ?? labels.unknown}
             </p>
             {res.data.version.note && <p className="text-sm text-muted">{res.data.version.note}</p>}
-            <div ref={lyricBox} className="max-h-80 space-y-3 overflow-y-auto" aria-label="Текст песни">
+            <div ref={lyricBox} className={immersive ? 'max-h-[55dvh] space-y-5 overflow-y-auto' : 'max-h-80 space-y-3 overflow-y-auto'} aria-label="Текст песни">
               {lines.length ? (
                 lines.map((line, i) => (
                   <button
@@ -220,13 +222,13 @@ export function MusicTrack({
                     disabled={!onSeek}
                     onClick={() => onSeek?.(line.time)}
                     aria-current={i === active ? 'true' : undefined}
-                    className={`block w-full text-left leading-7 ${i === active ? 'font-semibold text-accent' : 'text-muted'}`}
+                    className={`block w-full text-left ${immersive ? 'text-xl font-semibold leading-relaxed' : 'leading-7'} ${i === active ? 'font-semibold text-accent' : 'text-muted'}`}
                   >
                     {line.text || '♪'}
                   </button>
                 ))
               ) : (
-                <p className="whitespace-pre-wrap leading-7 text-muted">
+                <p className={immersive ? 'whitespace-pre-wrap text-xl font-semibold leading-relaxed text-white/75' : 'whitespace-pre-wrap leading-7 text-muted'}>
                   {res.data.lyrics.plain || 'Текст пока не добавлен.'}
                 </p>
               )}

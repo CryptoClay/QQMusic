@@ -1,22 +1,20 @@
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { swipeTrack } from '../lib/playbackRecovery';
-import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
-import { fmtDuration, providerLabel } from '../lib/format';
-import { downloadRef, hasNext, hasPrev, next, prev, seek, setVolume, stopListening, toggle, useListen } from '../lib/listen';
+import { providerLabel } from '../lib/format';
+import { hasNext, next, prev, seek, stopListening, useListen } from '../lib/listen';
 import { useDesktop } from '../lib/desktop';
 import { STANDALONE } from '../lib/embedded';
-import { addRec, hideRec } from '../lib/smartShuffle';
 import { Link, enc } from '../lib/router';
-import { Icon } from './Icon';
 import { LikeButton } from './LikeButton';
+import { Icon } from './Icon';
 import { usePreparation } from './Preparation';
 import { TrackMenuButton } from './TrackMenu';
-import { Cover, IconButton, Spinner, cx } from './ui';
+import { MusicTrack } from './MusicTrack';
+import { PlayerQueue } from './PlayerQueue';
+import { PlayButton, SeekBar, Transport, VolumeControl } from './PlayerControls';
+import { Cover, IconButton, Sheet, cx } from './ui';
 
-/** Listening to a catalog track before downloading it: sits above the tab bar (inside the app: at the bottom of
- * the Hub page, which the app keeps above its own player). Publishes its height as `--player-h`.
- * ♥ stars the song (a track that isn't downloaded is downloaded first); ⏮/⏭ move through the list it was
- * started from («Моя волна» — 〜 before the artist: the list goes on by itself, `lib/wave.ts`). In a plain browser
- * a tap on the track opens the full player with the queue (`/player`); inside the app — the album. */
+/** One persistent player: opening its queue or lyrics never replaces the audio element. */
 export function MiniPlayer() {
   const track = useListen((s) => s.track);
   const phase = useListen((s) => s.phase);
@@ -24,188 +22,245 @@ export function MiniPlayer() {
   const error = useListen((s) => s.error);
   const position = useListen((s) => s.position);
   const duration = useListen((s) => s.duration);
-  const volume = useListen((s) => s.volume);
-  const dl = useListen((s) => (s.track ? s.downloads.get(s.track.ref) : undefined));
-  const canNext = useListen((s) => hasNext(s) || (s.repeat === 'all' && !s.context.startsWith('wave:')));
-  const canPrev = useListen(hasPrev);
   const onWave = useListen((s) => s.context.startsWith('wave:'));
-  const [busy, setBusy] = useState(false);
-  const [scrub, setScrub] = useState<number | null>(null);
+  const canNext = useListen((s) => hasNext(s) || (s.repeat === 'all' && !s.context.startsWith('wave:')));
+  const [panel, setPanel] = useState<'queue' | 'lyrics' | null>(null);
   const box = useRef<HTMLDivElement>(null);
-  const gesture = useRef<{x: number; y: number; at: number} | null>(null);
+  const gesture = useRef<{ x: number; y: number; at: number } | null>(null);
   const suppressClick = useRef(false);
   const desktop = useDesktop();
   const shown = !!track;
   const preparing = usePreparation(track?.ref, phase === 'resolving' || phase === 'loading');
-
-
-  useLayoutEffect(() => {
-    const el = box.current;
-    const root = document.documentElement;
-    if (!shown || !el) return;
-    const publish = () => root.style.setProperty('--player-h', `${el.offsetHeight}px`);
-    publish();
-    const ro = new ResizeObserver(publish);
-    ro.observe(el);
-    return () => {
-      ro.disconnect();
-      root.style.removeProperty('--player-h');
-    };
+  useEffect(() => {
+    if (!shown) setPanel(null);
   }, [shown]);
-
+  useLayoutEffect(() => {
+    const element = box.current;
+    if (!shown || !element) return;
+    const publish = () => document.documentElement.style.setProperty('--player-h', `${element.offsetHeight}px`);
+    publish();
+    const observer = new ResizeObserver(publish);
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+      document.documentElement.style.removeProperty('--player-h');
+    };
+  }, [shown, desktop]);
   if (!track) return null;
-
-  const waiting = phase === 'resolving' || phase === 'loading';
-  const playing = phase === 'playing' || waiting;
-  const owned = info?.kind === 'library';
+  const source =
+    info?.kind === 'full'
+      ? providerLabel(info.provider)
+      : info?.kind === 'library'
+        ? 'В библиотеке'
+        : info?.kind === 'preview'
+          ? 'Превью · 30 сек'
+          : null;
   const status =
     phase === 'error'
       ? error
-      : preparing ? preparing : phase === 'resolving' && !info
-        ? 'Ищу файл…'
-        : waiting
-          ? 'Загрузка…'
-          : null;
-  const source = info?.kind === 'full' ? providerLabel(info.provider) : owned ? 'из библиотеки' : null;
-  const shownPos = scrub ?? Math.min(position, duration || position);
-  const pct = duration ? Math.min(100, (shownPos / duration) * 100) : 0;
-  const commit = () => {
-    if (scrub !== null) seek(scrub);
-    setScrub(null);
-  };
-
-  const download = async () => {
-    setBusy(true);
-    await downloadRef(track.ref);
-    setBusy(false);
-  };
-
-  const head = (
+      : (preparing ?? (phase === 'resolving' ? 'Ищу файл…' : phase === 'loading' ? 'Загрузка…' : null));
+  const title = (
     <>
-      <Cover src={track.cover_small_url || track.cover_url} size={44} alt="" />
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-[15px] font-medium leading-tight">{track.title}</div>
-        {status ? (
-          <div className={cx('text-[13px] leading-tight', phase === 'error' ? 'line-clamp-2 text-danger' : 'truncate text-muted')}>{status}</div>
-        ) : (
-          <div className="flex items-center gap-1.5 text-[13px] leading-tight text-muted">
-            {onWave && (
-              <span title="Моя волна" className="shrink-0 text-accent">
-                <Icon name="wave" size={14} />
-              </span>
-            )}
-            {track.rec && (
-              <span title={track.rec.label} className="shrink-0 text-accent">
-                <Icon name="sparkle" size={14} />
-              </span>
-            )}
-            {info?.kind === 'preview' && <span className="shrink-0 rounded bg-warn/15 px-1 text-[11px] font-semibold text-warn">превью 30 сек</span>}
-            <span className="truncate">{[track.artist, source].filter(Boolean).join(' · ')}</span>
-          </div>
+      <Cover
+        src={track.cover_small_url || track.cover_url}
+        size={desktop ? 56 : 44}
+        alt=""
+        className="player-cover shrink-0 !rounded-lg"
+      />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-semibold text-fg" title={track.title}>
+          {track.title}
+        </span>
+        <span
+          className={cx('mt-1 block truncate text-xs', phase === 'error' ? 'text-danger' : 'text-muted')}
+          title={status || [track.artist, source].filter(Boolean).join(' · ')}
+        >
+          {status ||
+            (desktop
+              ? track.artist
+              : info?.kind === 'preview'
+                ? `Превью 30 сек · ${track.artist}`
+                : [track.artist, source].filter(Boolean).join(' · '))}
+        </span>
+        {desktop && !status && (
+          <span className="mt-1 block truncate text-[10px] font-medium uppercase tracking-[.1em] text-dim">
+            {onWave ? 'Моя волна' : source}
+          </span>
         )}
-      </div>
+      </span>
     </>
   );
-
+  const song = (
+    <Link
+      to={STANDALONE ? '/player' : track.album_ref ? `/album/${enc(track.album_ref)}` : '/search'}
+      title="Открыть плеер"
+      className="flex min-w-0 flex-1 items-center gap-3 rounded-lg"
+      style={{ touchAction: 'pan-y' }}
+      onPointerDown={(e) => {
+        suppressClick.current = false;
+        if (e.pointerType === 'touch') gesture.current = { x: e.clientX, y: e.clientY, at: Date.now() };
+      }}
+      onPointerCancel={() => {
+        gesture.current = null;
+      }}
+      onPointerUp={(e) => {
+        const from = gesture.current;
+        gesture.current = null;
+        if (!from) return;
+        const direction = swipeTrack(e.clientX - from.x, e.clientY - from.y, Date.now() - from.at);
+        if (!direction) return;
+        suppressClick.current = true;
+        if (direction === 'next') void next();
+        else prev();
+      }}
+      onClick={(e) => {
+        if (suppressClick.current) {
+          e.preventDefault();
+          suppressClick.current = false;
+        }
+      }}
+    >
+      {title}
+    </Link>
+  );
+  const like = (
+    <LikeButton
+      songId={info?.nd_song_id}
+      refId={track.ref}
+      title={track.title}
+      data={{ ...track }}
+      className="!h-9 !w-9 shrink-0"
+      size={19}
+    />
+  );
+  const menu = (
+    <TrackMenuButton
+      track={{ ...track, nd_song_id: info?.nd_song_id }}
+      inPlayer
+      extra={[
+        { icon: 'queue', label: 'Очередь воспроизведения', onClick: () => setPanel('queue') },
+        { icon: 'lyrics', label: 'Текст песни', onClick: () => setPanel('lyrics') },
+        { icon: 'x', label: 'Закрыть плеер', onClick: stopListening },
+      ]}
+      className="!h-9 !w-9 !text-muted"
+    />
+  );
   return (
-    <div ref={box} className={desktop ? 'fixed bottom-0 left-[238px] right-0 z-40 px-4 pb-3' : 'fixed inset-x-0 bottom-[calc(var(--tabbar-h)+env(safe-area-inset-bottom))] z-40 mx-auto max-w-2xl px-2 pb-2'} role="region" aria-label="Прослушивание">
-      <div className={desktop ? 'anim-up mx-auto max-w-[1152px] overflow-hidden rounded-2xl border border-[#3b3938] bg-[#202022]/[.98] shadow-2xl backdrop-blur' : 'anim-up overflow-hidden rounded-xl border border-line bg-raised/95 shadow-2xl backdrop-blur'}>
-        <div className="flex items-center gap-2 py-1.5 pl-2 pr-1">
-          {STANDALONE ? (
-            <Link to="/player" className="flex min-w-0 flex-1 items-center gap-3" title="Открыть плеер"
-              style={{ touchAction: 'pan-y' }}
-              onPointerDown={e => { suppressClick.current = false; if (e.pointerType === 'touch') gesture.current = { x: e.clientX, y: e.clientY, at: Date.now() }; }}
-              onPointerCancel={() => { gesture.current = null; }}
-              onPointerUp={e => {
-                const from = gesture.current; gesture.current = null;
-                if (!from) return;
-                const direction = swipeTrack(e.clientX - from.x, e.clientY - from.y, Date.now() - from.at);
-                if (!direction) return;
-                suppressClick.current = true;
-                if (direction === 'next') void next(); else prev();
-              }}
-              onClick={e => { if (suppressClick.current) { e.preventDefault(); suppressClick.current = false; } }}>
-              {head}
-            </Link>
-          ) : track.album_ref ? (
-            <Link to={`/album/${enc(track.album_ref)}`} className="flex min-w-0 flex-1 items-center gap-3" title="Открыть альбом">
-              {head}
-            </Link>
+    <>
+      <div
+        ref={box}
+        role="region"
+        aria-label="Прослушивание"
+        className={
+          desktop
+            ? 'fixed bottom-0 left-[238px] right-0 z-40 px-4 pb-3'
+            : 'fixed inset-x-0 bottom-[calc(var(--tabbar-h)+env(safe-area-inset-bottom))] z-40 mx-auto max-w-2xl px-2 pb-2'
+        }
+      >
+        <div
+          className={cx(
+            'player-dock anim-up border border-white/[.08] bg-[#1c1c1e]/95 shadow-2xl backdrop-blur-xl',
+            desktop
+              ? 'grid grid-cols-[minmax(150px,1fr)_minmax(270px,1.5fr)_minmax(185px,1fr)] items-center gap-4 rounded-2xl px-4 py-3'
+              : 'overflow-hidden rounded-2xl',
+          )}
+        >
+          {desktop ? (
+            <>
+              <div className="flex min-w-0 items-center gap-2">
+                {song}
+                {like}
+              </div>
+              <div className="min-w-0 space-y-1">
+                <Transport />
+                <SeekBar compact />
+              </div>
+              <div className="flex items-center justify-end gap-0.5">
+                <div className="w-9 min-[1280px]:w-28">
+                  <span className="min-[1280px]:hidden">
+                    <VolumeControl slider={false} />
+                  </span>
+                  <span className="hidden min-[1280px]:block">
+                    <VolumeControl />
+                  </span>
+                </div>
+                <IconButton
+                  icon="lyrics"
+                  label="Текст песни"
+                  aria-pressed={panel === 'lyrics'}
+                  onClick={() => setPanel(panel === 'lyrics' ? null : 'lyrics')}
+                  className={cx('!h-9 !w-9', panel === 'lyrics' ? '!text-accent' : '!text-muted')}
+                  size={18}
+                />
+                <IconButton
+                  icon="queue"
+                  label="Очередь воспроизведения"
+                  aria-pressed={panel === 'queue'}
+                  onClick={() => setPanel(panel === 'queue' ? null : 'queue')}
+                  className={cx('!h-9 !w-9', panel === 'queue' ? '!text-accent' : '!text-muted')}
+                  size={19}
+                />
+                {menu}
+                <Link
+                  to="/player"
+                  title="Большой плеер"
+                  aria-label="Большой плеер"
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted hover:bg-white/10 hover:text-fg"
+                >
+                  <Icon name="expand" size={17} />
+                </Link>
+              </div>
+            </>
           ) : (
-            <div className="flex min-w-0 flex-1 items-center gap-3">{head}</div>
+            <>
+              <div className="flex items-center gap-1.5 px-2.5 pb-0.5 pt-2.5">
+                {song}
+                {like}
+                <PlayButton />
+                <span className="hidden min-[360px]:inline-flex">
+                  <IconButton
+                    icon="next"
+                    label="Следующий трек"
+                    onClick={() => void next()}
+                    disabled={!canNext}
+                    className="!h-9 !w-9"
+                    size={21}
+                  />
+                </span>
+                {menu}
+              </div>
+              <div className="px-3 pb-1">
+                <SeekBar compact />
+              </div>
+            </>
           )}
-          {STANDALONE && (
-            <div className="hidden w-36 shrink-0 items-center gap-1.5 text-muted md:flex">
-              <Icon name="volume" size={18} className="shrink-0" />
-              <input type="range" className="qqmusic-range min-w-0 flex-1" aria-label="Громкость"
-                aria-valuetext={`${Math.round(volume * 100)}%`}
-                min={0} max={100} step={1} value={Math.round(volume * 100)}
-                style={{ '--p': `${volume * 100}%` } as CSSProperties}
-                onChange={(e) => setVolume(Number(e.target.value) / 100)} />
-            </div>
-          )}
-          <TrackMenuButton track={{ ...track, nd_song_id: info?.nd_song_id }} className="w-9" inPlayer />
-          <LikeButton songId={info?.nd_song_id} refId={track.ref} title={track.title} data={{ ...track }} className="-mr-1" />
-          <button
-            type="button"
-            onClick={toggle}
-            aria-label={phase === 'error' ? 'Повторить' : playing ? 'Пауза' : 'Слушать'}
-            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-fg text-bg transition active:scale-95"
-          >
-            {phase === 'error' ? (
-              <Icon name="refresh" size={20} stroke={2.4} />
-            ) : waiting ? (
-              <Spinner size={20} />
-            ) : playing ? (
-              <Icon name="pause" size={20} stroke={3} />
-            ) : (
-              <Icon name="play" size={20} stroke={2.4} className="translate-x-px" />
-            )}
-          </button>
-          {STANDALONE ? null : owned || dl ? (
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center text-accent" title={owned || dl === 'done' ? 'Есть в библиотеке' : 'В загрузках'}>
-              <Icon name="check" size={20} stroke={2.6} />
-            </span>
-          ) : (
-            <IconButton icon="download" label="Скачать" onClick={download} busy={busy} />
-          )}
-          <IconButton icon="x" label="Закрыть плеер" onClick={stopListening} size={18} className="w-9 text-muted" />
-        </div>
-        {track.rec && (
-          <div className="flex items-center gap-1 border-t border-line/60 py-0.5 pl-3 pr-1" role="group" aria-label="Рекомендация">
-            <Icon name="sparkle" size={14} className="shrink-0 text-accent" />
-            <span className="min-w-0 flex-1 truncate text-xs text-muted">{track.rec.label}</span>
-            <IconButton icon="plus" label={track.rec.label.includes('любим') ? 'В понравившиеся' : 'Добавить в плейлист'} onClick={() => void addRec(track)} size={18} className="h-8 w-9 !text-accent" />
-            <IconButton icon="minus" label="Не рекомендовать здесь" onClick={() => void hideRec(track)} size={18} className="h-8 w-9 text-muted" />
-          </div>
-        )}
-        <div className="flex items-center gap-2 pb-1 pl-1 pr-1 text-[11px] tabular-nums text-muted">
-          <IconButton icon="prev" label={canPrev ? 'Предыдущий трек' : 'Сначала'} onClick={prev} size={16} className="h-8 w-8 text-muted" />
-          <span className="w-9 shrink-0 text-right">{fmtDuration(shownPos) || '0:00'}</span>
-          <input
-            type="range"
-            className="qqmusic-range min-w-0 flex-1"
-            aria-label="Перемотка"
-            min={0}
-            max={Math.max(1, Math.round(duration))}
-            step={1}
-            value={Math.round(shownPos)}
-            disabled={!duration || phase === 'resolving' || phase === 'error'}
-            style={{ '--p': `${pct}%` } as CSSProperties}
-            onChange={(e) => setScrub(Number(e.target.value))}
-            onPointerUp={commit}
-            onKeyUp={commit}
-            onBlur={commit}
-          />
-          <span className="w-9 shrink-0">{fmtDuration(duration) || '–:––'}</span>
-          <IconButton icon="next" label="Следующий трек" onClick={() => void next()} disabled={!canNext} size={16} className="h-8 w-8 text-muted" />
         </div>
       </div>
-    </div>
+      <Sheet
+        open={panel !== null}
+        onClose={() => setPanel(null)}
+        title={panel === 'queue' ? 'Очередь воспроизведения' : 'Текст песни'}
+      >
+        {panel === 'queue' ? (
+          <PlayerQueue />
+        ) : panel === 'lyrics' ? (
+          <MusicTrack
+            key={track.ref}
+            refId={track.ref}
+            title={track.title}
+            artist={track.artist}
+            position={position}
+            duration={duration}
+            onSeek={seek}
+            playedRef={info?.ref}
+            resolvedKey={`${info?.kind}:${info?.provider}:${info?.nd_song_id}`}
+          />
+        ) : null}
+      </Sheet>
+    </>
   );
 }
 
-/** Keeps the end of the page above the player (the app's style fixes `main`'s bottom padding). */
 export function PlayerSpacer() {
   const shown = useListen((s) => !!s.track);
   return shown ? <div aria-hidden="true" style={{ height: 'var(--player-h, 0px)' }} /> : null;

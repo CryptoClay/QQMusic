@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { api, errorMessage, invalidateCache, isAbort, peekCache, request, withQuery } from '../api/client';
+import { api, errorMessage, invalidateCache, isAbort, libraryCoverUrl, peekCache, request, withQuery } from '../api/client';
 import type { Candidate, LibTrackOut, ProviderSearchOut, SearchOut, SearchTracksOut, TrackOut } from '../api/types';
 import { ArtistBubble, ReleaseCard, TrackRow, listenTrack } from '../components/catalog';
 import { TrackMenuButton } from '../components/TrackMenu';
@@ -376,7 +376,7 @@ function CatalogResults({ q }: { q: string }) {
 
 function playLibrary(tracks: LibTrackOut[], track: LibTrackOut) {
   if (canPlay()) return playList(tracks, t => t.nd_song_id, track);
-  const queue = tracks.filter(t => t.nd_song_id).map(t => ({ ref: 'nd:' + t.nd_song_id, title: t.title, artist: t.artist, duration_s: t.duration_s, album_ref: undefined }));
+  const queue = tracks.filter(t => t.nd_song_id).map(t => ({ ref: 'nd:' + t.nd_song_id, title: t.title, artist: t.artist, duration_s: t.duration_s, cover_url: t.album_id ? libraryCoverUrl(t.album_id,600) : undefined, cover_small_url: t.album_id ? libraryCoverUrl(t.album_id,100) : undefined, album_ref: undefined }));
   const selected = queue.find(t => t.ref === 'nd:' + track.nd_song_id);
   if (selected) listen(selected, queue, 'search');
 }
