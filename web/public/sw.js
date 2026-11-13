@@ -131,7 +131,7 @@ async function handleShare(req) {
     return Response.redirect('/#/share', 303);
   } catch (e) {
     // Could not store locally: let the server-side fallback handle it next time.
-    return Response.redirect('/#/assistant', 303);
+    return Response.redirect('/#/share?fallback=1', 303);
   }
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { api, errorMessage, invalidateCache, isAbort, peekCache, withQuery } from '../api/client';
+import { api, errorMessage, invalidateCache, isAbort, peekCache, request, withQuery } from '../api/client';
 import type { Candidate, LibTrackOut, ProviderSearchOut, SearchOut, SearchTracksOut, TrackOut } from '../api/types';
 import { ArtistBubble, ReleaseCard, TrackRow, listenTrack } from '../components/catalog';
 import { TrackMenuButton } from '../components/TrackMenu';
@@ -12,7 +12,7 @@ import { startDownload } from '../lib/actions';
 import { useHubEvent } from '../lib/events';
 import { fmtDuration } from '../lib/format';
 import { useAsync, useDebounced, useRememberScrollX, type AsyncState } from '../lib/hooks';
-import { extendQueue, markQueued, useListen } from '../lib/listen';
+import { extendQueue, listen, markQueued, useListen } from '../lib/listen';
 import { canPlay, canPlayAll, playList } from '../lib/player';
 import { Link, navigate } from '../lib/router';
 import { useDesktop } from '../lib/desktop';
@@ -20,9 +20,9 @@ import { DesktopSearchHeader, DesktopSearchEmpty, DesktopSearchResults } from '.
 import { MixCard } from './Mix';
 import { SourceProblem } from '../components/SourceProblem';
 
-export type SearchTab = 'catalog' | 'files' | 'reuploads';
+export type SearchTab = 'catalog' | 'library' | 'files' | 'reuploads';
 
-export const searchTab = (v: string | null): SearchTab => (v === 'files' || v === 'reuploads' ? v : 'catalog');
+export const searchTab = (v: string | null): SearchTab => (v === 'library' || v === 'files' || v === 'reuploads' ? v : 'catalog');
 
 export function SearchPage({ initialQuery, initialTab }: { initialQuery: string; initialTab: SearchTab }) {
   const [q, setQ] = useState(initialQuery);
@@ -64,7 +64,7 @@ export function SearchPage({ initialQuery, initialTab }: { initialQuery: string;
     <div>
       <DesktopSearchHeader tab={tab} onTab={setTab} query={q} onQuery={setQ} inputRef={inputRef} />
       {historyError && <div className="mx-auto max-w-[1180px] px-8 pb-3"><Notice>{historyError}</Notice></div>}
-      {!dq ? <><DesktopSearchEmpty onSearch={() => inputRef.current?.focus()} /><DesktopSearchResults><RecentSearches onPick={setQ} hideEmpty /></DesktopSearchResults></> : <DesktopSearchResults>{tab === 'catalog' ? <CatalogResults q={dq} /> : tab === 'files' ? <ProviderResults q={dq} /> : <ReuploadResults q={dq} />}</DesktopSearchResults>}
+      {tab === 'library' ? <DesktopSearchResults><LocalResults key={dq} q={dq} /></DesktopSearchResults> : !dq ? <><DesktopSearchEmpty onSearch={() => inputRef.current?.focus()} /><DesktopSearchResults><RecentSearches onPick={setQ} hideEmpty /></DesktopSearchResults></> : <DesktopSearchResults>{tab === 'catalog' ? <CatalogResults q={dq} /> : tab === 'files' ? <ProviderResults q={dq} /> : <ReuploadResults q={dq} />}</DesktopSearchResults>}
     </div>
   ) : (
     <div>
@@ -102,7 +102,8 @@ export function SearchPage({ initialQuery, initialTab }: { initialQuery: string;
             value={tab}
             onChange={setTab}
             options={[
-              { value: 'catalog', label: 'Каталог' },
+              { value: 'catalog', label: 'Всё' },
+              { value: 'library', label: 'Библиотека' },
               { value: 'files', label: 'Файлы' },
               { value: 'reuploads', label: 'Без цензуры' },
             ]}
@@ -112,7 +113,7 @@ export function SearchPage({ initialQuery, initialTab }: { initialQuery: string;
 
       {historyError && <div className="px-4 pb-3"><Notice>{historyError}</Notice></div>}
 
-      {!dq ? (
+      {tab === 'library' ? <LocalResults key={dq} q={dq} /> : !dq ? (
         <>
           <MixCard />
           <WaveCard />
@@ -316,7 +317,7 @@ function CatalogResults({ q }: { q: string }) {
         <section aria-label="В библиотеке">
           <SectionTitle>В библиотеке</SectionTitle>
           {data.library.slice(0, 5).map((t, _, shown) => (
-            <LibraryTrackRow key={t.id} t={t} onPlay={canPlay() && t.nd_song_id ? () => playList(shown, (x) => x.nd_song_id, t) : undefined} />
+            <LibraryTrackRow key={t.id} t={t} onPlay={t.nd_song_id ? () => playLibrary(shown, t) : undefined} />
           ))}
         </section>
       )}
@@ -371,6 +372,36 @@ function CatalogResults({ q }: { q: string }) {
       )}
     </div>
   );
+}
+
+function playLibrary(tracks: LibTrackOut[], track: LibTrackOut) {
+  if (canPlay()) return playList(tracks, t => t.nd_song_id, track);
+  const queue = tracks.filter(t => t.nd_song_id).map(t => ({ ref: 'nd:' + t.nd_song_id, title: t.title, artist: t.artist, duration_s: t.duration_s, album_ref: undefined }));
+  const selected = queue.find(t => t.ref === 'nd:' + track.nd_song_id);
+  if (selected) listen(selected, queue, 'search');
+}
+
+function LocalResults({ q }: { q: string }) {
+  const [quality, setQuality] = useState('all');
+  const [available, setAvailable] = useState(false);
+  const [offset, setOffset] = useState(0);
+  type LocalTrack = LibTrackOut & { available: boolean };
+  const res = useAsync(s => request<{ tracks: LocalTrack[]; total: number; next_offset: number | null }>('GET',
+    withQuery('/api/search/library', { q, quality, available, offset, limit: 30 }), { signal: s }), [q, quality, available, offset]);
+  useHubEvent('library', () => res.reload(true));
+  const tracks = res.data?.tracks ?? [];
+  return <section className="pb-5" aria-label="Поиск по библиотеке">
+    <div className="flex flex-wrap items-center gap-4 px-4 py-3 text-sm">
+      <label className="flex items-center gap-2">Качество<select className="input w-auto" value={quality} onChange={e => { setQuality(e.target.value); setOffset(0); }}><option value="all">Любое</option><option value="lossless">Без потерь</option><option value="lossy">Сжатое</option></select></label>
+      <label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={available} onChange={e => { setAvailable(e.target.checked); setOffset(0); }} />Только доступные файлы</label>
+    </div>
+    {res.loading ? <SkeletonRows n={5} /> : res.error ? <ErrorState text={res.error} onRetry={() => res.reload()} /> : <>
+      <p className="px-4 pb-2 text-xs text-muted">Найдено: {res.data?.total ?? 0}. Локальные файлы — внешний каталог не запрашивается.</p>
+      {!tracks.length && <Empty icon="search" title="В библиотеке ничего не найдено" text="Измените запрос или фильтры; новую музыку можно найти во вкладке «Всё»." />}
+      {tracks.map(t => <div key={t.id}><LibraryTrackRow t={t} onPlay={t.available && t.nd_song_id ? () => playLibrary(tracks.filter(x => x.available && x.nd_song_id), t) : undefined} /><p className="px-4 pb-2 text-xs text-muted">{t.available ? 'Файл на сервере' : 'Файл отсутствует'} · {t.codec?.toUpperCase() ?? 'Формат неизвестен'}{t.bitrate_kbps ? ` · ${t.bitrate_kbps} кбит/с` : ''}</p></div>)}
+      <div className="flex justify-between gap-3 px-4 pt-3"><Button small disabled={!offset} onClick={() => setOffset(Math.max(0, offset - 30))}>Назад</Button><Button small disabled={res.data?.next_offset == null} onClick={() => setOffset(res.data!.next_offset!)}>Дальше</Button></div>
+    </>}
+  </section>;
 }
 
 function LibraryTrackRow({ t, onPlay }: { t: LibTrackOut; onPlay?: () => void }) {

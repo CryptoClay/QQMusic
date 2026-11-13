@@ -78,28 +78,71 @@ async def clear_search_history(user: User = Depends(current_user),
 
 
 async def search_library(s: AsyncSession, q: str, limit: int = 20) -> list[Track]:
-    like = f"%{q}%"
+    like = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
     rows = (
         await s.execute(
             select(Track)
-            .where(or_(Track.title.ilike(like), Track.artist.ilike(like), Track.album.ilike(like)))
+            .where(or_(Track.title.ilike(like, escape="\\"), Track.artist.ilike(like, escape="\\"), Track.album.ilike(like, escape="\\")))
+            .order_by(Track.artist, Track.title, Track.id)
             .limit(limit)
         )
     ).scalars().all()
     if rows:
         return list(rows)
     # SQLite LIKE is case-insensitive only for ASCII: fall back to normalized matching in Python
-    nq = normalize_title(q).text
+    literal = "%" in q or "_" in q or "\\" in q
+    nq = q.casefold() if literal else normalize_title(q).text
     if not nq:
         return []
     out = []
     for t in (await s.execute(select(Track))).scalars():
-        hay = normalize_title(f"{t.artist} {t.title} {t.album or ''}").text
+        text = f"{t.artist} {t.title} {t.album or ''}"
+        hay = text.casefold() if literal else normalize_title(text).text
         if all(w in hay for w in nq.split()):
             out.append(t)
             if len(out) >= limit:
                 break
     return out
+
+
+@router.get("/library")
+async def local_search(response: Response, q: str = Query("", max_length=512),
+                       offset: int = Query(0, ge=0), limit: int = Query(30, ge=1, le=100),
+                       quality: Literal["all", "lossless", "lossy"] = "all", available: bool = False,
+                       user: User = Depends(current_user), s: AsyncSession = Depends(get_session, scope="function")):
+    """Local search remains usable when remote catalogs are unavailable. Version suffixes are preserved."""
+    from app.api.library_care import safe_path
+
+    response.headers.update({"Cache-Control": "private, no-store", "Vary": "Cookie"})
+    words = q.casefold().split()
+    found, seen = [], set()
+    # Filter and page in a worker: Unicode matching and filesystem probes must not block the event loop.
+    rows = list(await s.scalars(select(Track).order_by(Track.artist, Track.title, Track.id)))
+    def matching():
+        for track in rows:
+            haystack = f"{track.artist} {track.title} {track.album or ''}".casefold()
+            if not all(word in haystack for word in words):
+                continue
+            codec = (track.codec or "").lower()
+            lossless = codec in ("flac", "alac", "wav", "aiff", "ape") or codec.startswith("pcm_")
+            lossy = codec in ("mp3", "aac", "opus", "vorbis", "wma", "wmav2", "mp2", "m4a", "ogg")
+            if (quality == "lossless" and not lossless) or (quality == "lossy" and not lossy):
+                continue
+            try:
+                exists = safe_path(track.path).is_file()
+            except HTTPException:
+                exists = False
+            if available and not exists:
+                continue
+            # Only identical library identities are folded; clean/live/remixes stay separate.
+            key = track.uid
+            if key in seen:
+                continue
+            seen.add(key)
+            found.append({**track_out(track).model_dump(), "available": exists})
+        return {"tracks": found[offset:offset + limit], "total": len(found),
+                "next_offset": offset + limit if offset + limit < len(found) else None}
+    return await asyncio.to_thread(matching)
 
 
 @router.get("", response_model=SearchOut)
@@ -133,9 +176,17 @@ async def search(q: str = Query(min_length=1), user: User = Depends(current_user
 
 
 def _unique(tracks: list[CatalogTrack]) -> list[CatalogTrack]:
-    """Deezer may list a track twice; the PWA keys rows by ref."""
-    seen: set[str] = set()
-    return [t for t in tracks if not (t.ref in seen or seen.add(t.ref))]
+    """Fold repeated catalog identities; only fold editions with the same ISRC and version metadata."""
+    refs, recordings, out = set(), set(), []
+    for track in tracks:
+        key = (track.isrc, track.artist.casefold(), track.title.casefold(), track.duration_s, track.explicit)
+        if track.ref in refs or (track.isrc and key in recordings):
+            continue
+        refs.add(track.ref)
+        if track.isrc:
+            recordings.add(key)
+        out.append(track)
+    return out
 
 
 @router.get("/tracks", response_model=SearchTracksOut)

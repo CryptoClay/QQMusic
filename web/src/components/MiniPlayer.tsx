@@ -1,3 +1,4 @@
+import { swipeTrack } from '../lib/playbackRecovery';
 import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { fmtDuration, providerLabel } from '../lib/format';
 import { downloadRef, hasNext, hasPrev, next, prev, seek, setVolume, stopListening, toggle, useListen } from '../lib/listen';
@@ -31,6 +32,8 @@ export function MiniPlayer() {
   const [busy, setBusy] = useState(false);
   const [scrub, setScrub] = useState<number | null>(null);
   const box = useRef<HTMLDivElement>(null);
+  const gesture = useRef<{x: number; y: number; at: number} | null>(null);
+  const suppressClick = useRef(false);
   const desktop = useDesktop();
   const shown = !!track;
   const preparing = usePreparation(track?.ref, phase === 'resolving' || phase === 'loading');
@@ -109,7 +112,19 @@ export function MiniPlayer() {
       <div className={desktop ? 'anim-up mx-auto max-w-[1152px] overflow-hidden rounded-2xl border border-[#3b3938] bg-[#202022]/[.98] shadow-2xl backdrop-blur' : 'anim-up overflow-hidden rounded-xl border border-line bg-raised/95 shadow-2xl backdrop-blur'}>
         <div className="flex items-center gap-2 py-1.5 pl-2 pr-1">
           {STANDALONE ? (
-            <Link to="/player" className="flex min-w-0 flex-1 items-center gap-3" title="Открыть плеер">
+            <Link to="/player" className="flex min-w-0 flex-1 items-center gap-3" title="Открыть плеер"
+              style={{ touchAction: 'pan-y' }}
+              onPointerDown={e => { suppressClick.current = false; if (e.pointerType === 'touch') gesture.current = { x: e.clientX, y: e.clientY, at: Date.now() }; }}
+              onPointerCancel={() => { gesture.current = null; }}
+              onPointerUp={e => {
+                const from = gesture.current; gesture.current = null;
+                if (!from) return;
+                const direction = swipeTrack(e.clientX - from.x, e.clientY - from.y, Date.now() - from.at);
+                if (!direction) return;
+                suppressClick.current = true;
+                if (direction === 'next') void next(); else prev();
+              }}
+              onClick={e => { if (suppressClick.current) { e.preventDefault(); suppressClick.current = false; } }}>
               {head}
             </Link>
           ) : track.album_ref ? (

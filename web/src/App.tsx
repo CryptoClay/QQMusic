@@ -1,3 +1,5 @@
+import { NetworkStatus } from './components/NetworkStatus';
+import { WelcomePage, InstallPage, ServerPage } from './pages/Experience';
 import { setListeningAccount } from './lib/plays';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { ApiError, UNAUTHORIZED_EVENT, api, errorMessage, invalidateCache } from './api/client';
@@ -94,6 +96,9 @@ const ROUTES: RouteDef[] = [
       />
     ),
   ],
+  ['/welcome', 'more', () => <WelcomePage />],
+  ['/install', 'more', () => <InstallPage />],
+  ['/admin/server', 'more', () => <ServerPage />],
   ['/more', 'more', () => <MorePage />],
   ['/music-settings', 'more', () => <MusicSettingsPage />],
   ['/notes', 'library', () => <NotesPage />],
@@ -248,6 +253,7 @@ function PrivateApp() {
   return (
     <SessionContext.Provider value={{ me, logout }}>
       <CommunitySync/>
+      <NetworkStatus />
       {desktopShell ? (
         <DesktopShell me={me} active={resolved?.tab ?? null}>
           <main id="desktop-main" tabIndex={-1} className={cx('mx-auto min-h-dvh w-full px-4 pb-8', wide ? 'max-w-[1480px]' : 'max-w-[1280px]')}>{resolved?.node}<PlayerSpacer /></main>

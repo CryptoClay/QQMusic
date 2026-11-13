@@ -4,6 +4,7 @@ import asyncio
 import base64
 import calendar
 import io
+import json
 from datetime import datetime, timedelta
 from typing import Annotated, Literal
 from urllib.parse import urlsplit
@@ -12,7 +13,7 @@ import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 from PIL import Image, ImageOps
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -226,7 +227,7 @@ async def save_preferences(
     await s.execute(
         insert(MusicPreferences)
         .values(user_id=user.id, data_json=data)
-        .on_conflict_do_update(index_elements=["user_id"], set_={"data_json": data})
+        .on_conflict_do_update(index_elements=["user_id"], set_={"data_json": func.json_patch(MusicPreferences.data_json, json.dumps(data))})
     )
     await s.commit()
     return data

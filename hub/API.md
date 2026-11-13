@@ -634,3 +634,14 @@ All `/api/community/*` routes require a session and return private, non-cacheabl
 | `GET /api/public/{token}`, `GET/HEAD /api/public/{token}/audio/{uid}` | Scoped capability, expiry and revocation; members mode also checks current membership |
 
 Public audio only serves snapshot UUIDs from local files, supports Range, and never invokes the authenticated resolver or accesses Nextcloud. See [community documentation](../docs/community.md) for limits, data migration and privacy boundaries.
+
+## Browser experience
+
+| Method | Path | Scope |
+| --- | --- | --- |
+| GET | `/api/experience/home` | Own welcome state, latest device, accessible playlists and active request count |
+| PUT | `/api/experience/welcome` | Mark own welcome complete, preserving sound settings |
+| GET | `/api/experience/server` | Admin: disk capacity, Navidrome, queue, source observations, sanitized failure categories |
+| GET | `/api/search/library?q=&quality=all&available=false&offset=0&limit=30` | Authenticated local library search, no remote catalog requests; quality: all/lossless/lossy |
+
+All four responses use private, no-store caching. [Browser workflows](../docs/browser-experience.md).

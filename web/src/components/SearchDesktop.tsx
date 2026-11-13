@@ -21,7 +21,8 @@ export function DesktopSearchHeader({ tab, onTab, query, onQuery, inputRef }: { 
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-2" role="tablist" aria-label="Где искать">
         {([
-          ['catalog', 'Каталог', 'Артисты, альбомы и треки'],
+          ['catalog', 'Всё', 'Библиотека, артисты, альбомы и треки'],
+          ['library', 'Библиотека', 'Локальные файлы и качество'],
           ['files', 'Файлы', 'Доступные исходники'],
           ['reuploads', 'Без цензуры', 'Перезаливы'],
         ] as const).map(([value, label, hint]) => (

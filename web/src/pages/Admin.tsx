@@ -46,6 +46,7 @@ export function AdminPage() {
       <PageHeader title="Пользователи" back={EMBEDDED ? undefined : '/more'} right={<IconButton icon="refresh" label="Обновить" onClick={() => (users.reload(true), invites.reload(true))} />} />
 
       <ul className="mx-4 mb-3 overflow-hidden rounded-xl bg-surface">
+        <InsightLink to="/admin/server" icon="refresh" title="Состояние сервера" sub="место, очередь, источники и ошибки" />
         <InsightLink to="/admin/insights" icon="history" title="Аналитика пользователей" sub="прослушивания, миксы, волна по пользователям" />
         <InsightLink to="/admin/taste" icon="heart" title="Веса песен у всех" sub="песни × пользователи по профилю вкуса" />
       </ul>
@@ -135,7 +136,7 @@ export function AdminPage() {
   );
 }
 
-function InsightLink({ to, icon, title, sub }: { to: string; icon: 'history' | 'heart'; title: string; sub: string }) {
+function InsightLink({ to, icon, title, sub }: { to: string; icon: 'history' | 'heart' | 'refresh'; title: string; sub: string }) {
   return (
     <li className="border-b border-line/60 last:border-0">
       <Link to={to} className="flex min-h-14 items-center gap-3 px-4 py-2 hover:bg-fg/5">

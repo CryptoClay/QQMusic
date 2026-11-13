@@ -1,3 +1,4 @@
+import { recoveryDelay, playbackError } from './playbackRecovery';
 import { clientStorage, tabStorage } from './storage';
 import { useSyncExternalStore } from 'react';
 import { api, errorMessage, isAbort, listenPreviewUrl, listenStreamUrl, request } from '../api/client';
@@ -127,6 +128,13 @@ function set(patch: Partial<ListenState>) {
   // Time updates are frequent; queue edits and controls must survive an immediate reload.
   persistListening(Object.keys(patch).some((key) => key !== 'position' && key !== 'duration'));
   if (!!state.track !== shown) webPlayerShown(!!state.track);
+  if ('mediaSession' in navigator) {
+    const ms = navigator.mediaSession;
+    ms.playbackState = state.track ? state.phase === 'playing' ? 'playing' : 'paused' : 'none';
+    if (ms.setPositionState && state.duration > 0 && Number.isFinite(state.duration)) {
+      try { ms.setPositionState({ duration: state.duration, playbackRate: 1, position: Math.min(state.duration, Math.max(0, state.position)) }); } catch { /* browser support varies */ }
+    }
+  }
   for (const fn of subscribers) fn();
 }
 
@@ -335,11 +343,12 @@ function el(): HTMLAudioElement {
     }
     sync();
   });
-  a.addEventListener('timeupdate', sync);
+  a.addEventListener('timeupdate', () => { if (!a.paused && a.readyState >= 3) lastAudioProgress = Date.now(); sync(); });
   a.addEventListener('durationchange', sync);
   a.addEventListener('play', () => { stopPreview(); pauseNative(); });
   a.addEventListener('playing', () => {
     if (audio !== a) return;
+    window.clearTimeout(recoveryTimer); recoveryTimer = undefined; resumeOnConnection = false; lastAudioProgress = Date.now();
     if (fadingTail && fadeTimer === undefined) {
       const seconds = Math.max(0, Math.min(musicSettings().crossfade_s, fadingTail.duration - fadingTail.currentTime || 0));
       fadeLevel(fadingTail, 0, seconds);
@@ -380,7 +389,7 @@ function el(): HTMLAudioElement {
   a.addEventListener('error', () => {
     if (audio !== a) return;
     finishFade();
-    if (a.getAttribute('src')) { reportEnd(false, true); set({ phase: 'error', error: state.error ?? 'Не удалось воспроизвести' }); }
+    if (a.getAttribute('src') && state.phase !== 'paused') recoverStream(a, a.error?.code ?? 2);
   });
   // the app's player started: one player on screen, so this one closes (the app shows its own again)
   window.addEventListener(NATIVE_PLAYING_EVENT, stopListening);
@@ -396,6 +405,55 @@ function play(a: HTMLAudioElement) {
   });
 }
 
+let recoveryTimer: number | undefined;
+let recoveryAttempts = 0;
+let resumeOnConnection = false;
+let lastAudioProgress = Date.now();
+function cancelRecovery() {
+  window.clearTimeout(recoveryTimer);
+  recoveryTimer = undefined;
+  resumeOnConnection = false;
+}
+function reopenStream(a: HTMLAudioElement) {
+  if (audio !== a || !state.track) return;
+  pendingSeek = Math.max(0, state.position);
+  a.src = listenStreamUrl(state.track.ref) + '&retry=' + Date.now();
+  lastAudioProgress = Date.now();
+  play(a);
+  set({ phase: 'loading', error: null });
+}
+function recoverStream(a: HTMLAudioElement, code = 2) {
+  if (audio !== a || !state.track || recoveryTimer !== undefined) return;
+  finishFade();
+  if (played?.started) { accrue(played); played.anchor = null; checkpoint(); }
+  if (!navigator.onLine) {
+    resumeOnConnection = true;
+    set({ phase: 'error', error: playbackError(code, false) });
+    return;
+  }
+  const delay = code === 2 ? recoveryDelay(recoveryAttempts) : null;
+  if (delay !== null) {
+    recoveryAttempts++;
+    set({ phase: 'loading', error: null });
+    recoveryTimer = window.setTimeout(() => { recoveryTimer = undefined; reopenStream(a); }, delay);
+  } else {
+    reportEnd(false, true);
+    set({ phase: 'error', error: playbackError(code, true) });
+  }
+}
+window.addEventListener('online', () => {
+  if (resumeOnConnection && audio && state.track) {
+    resumeOnConnection = false;
+    reopenStream(audio);
+  }
+});
+window.setInterval(() => {
+  if (audio && state.track && state.phase === 'loading' && Date.now() - lastAudioProgress > 35000) {
+    lastAudioProgress = Date.now();
+    recoverStream(audio);
+  }
+}, 5000);
+
 /** `auto`: reached by the previous track ending; a track that can't be played is then skipped. */
 let fadingTail: HTMLAudioElement | null = null;
 let fadeTimer: number | undefined;
@@ -405,6 +463,9 @@ function finishFade() {
   if (audio) { fadeLevel(audio, 1); audio.volume = state.volume; }
 }
 function start(queue: readonly ListenTrack[], index: number, auto = false, position = 0, autoplay = true, fading = false) {
+  cancelRecovery();
+  recoveryAttempts = 0;
+  lastAudioProgress = Date.now();
   if (!fading) finishFade();
   stopPreview();
   const track = queue[index];
@@ -435,6 +496,7 @@ function start(queue: readonly ListenTrack[], index: number, auto = false, posit
     (e: unknown) => {
       if (isAbort(e) || resolving !== ctl) return;
       if (auto && hasNext(state)) return void start(state.queue, state.index + 1, true);
+      if (!navigator.onLine) { if (state.phase !== 'paused') recoverStream(a); a.pause(); return; }
       set({ phase: 'error', error: errorMessage(e) });
       finishFade();
       a.pause();
@@ -901,13 +963,16 @@ function resume() {
   const a = audio;
   const track = state.track;
   if (!a || !track) return;
-  if (state.phase === 'error') return start(state.queue, state.index);
+  if (state.phase === 'error' || a.error) return start(state.queue, state.index, false, state.position);
   if (state.phase === 'ended') return start(state.queue, state.index);
   set({ phase: state.info || state.position ? 'loading' : 'resolving' });
   play(a);
 }
 
 export function pause() {
+  const recovering = resumeOnConnection || recoveryTimer !== undefined;
+  cancelRecovery();
+  if (recovering && state.phase === 'error') { set({ phase: 'paused', error: null }); return; }
   finishFade();
   if (!audio || !state.track || state.phase === 'error' || state.phase === 'ended') return;
   audio.pause();
@@ -934,6 +999,7 @@ export function seek(seconds: number) {
 
 /** Stops and hides the player. */
 export function stopListening() {
+  cancelRecovery();
   finishFade();
   void request('POST','/api/listen/prepare',{json:{refs:[]}}).catch(()=>{});
   reportEnd();
@@ -998,15 +1064,16 @@ function mediaSession(track: ListenTrack) {
     artist: track.artist,
     artwork: track.cover_url ? [{ src: track.cover_url, sizes: '500x500' }] : [],
   });
-  try {
-    ms.setActionHandler('play', resume);
-    ms.setActionHandler('pause', pause);
-    ms.setActionHandler('seekto', (d) => d.seekTime !== undefined && seek(d.seekTime));
-    ms.setActionHandler('nexttrack', hasNext(state) || state.repeat === 'all' ? () => void next() : null);
-    ms.setActionHandler('previoustrack', prev);
-  } catch {
-    /* an action the browser doesn't know */
-  }
+  const action = (name: MediaSessionAction, handler: MediaSessionActionHandler | null) => {
+    try { ms.setActionHandler(name, handler); } catch { /* Unsupported actions must not disable other controls. */ }
+  };
+  action('play', resume);
+  action('pause', pause);
+  action('seekbackward', d => seek(Math.max(0, state.position - (d.seekOffset ?? 10))));
+  action('seekforward', d => seek(Math.min(state.duration, state.position + (d.seekOffset ?? 10))));
+  action('seekto', (d) => d.seekTime !== undefined && seek(d.seekTime));
+  action('nexttrack', hasNext(state) || state.repeat === 'all' ? () => void next() : null);
+  action('previoustrack', prev);
 }
 
 

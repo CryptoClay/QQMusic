@@ -1,5 +1,6 @@
+import { usePwaInstall } from '../lib/pwa';
 import { clientStorage } from '../lib/storage';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { request } from '../api/client';
 import { useDesktop } from '../lib/desktop';
 import { STANDALONE } from '../lib/embedded';
@@ -11,52 +12,21 @@ import { Link } from '../lib/router';
 import { setSmartEnabled, useSmartEnabled } from '../lib/smartShuffle';
 import { confirmDialog, toast } from '../lib/ui';
 
-interface InstallPromptEvent extends Event {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
-}
-
-// beforeinstallprompt fires early, possibly before this page mounts: keep it globally.
-let deferredInstall: InstallPromptEvent | null = null;
-window.addEventListener('beforeinstallprompt', (e) => {
-  e.preventDefault();
-  deferredInstall = e as InstallPromptEvent;
-});
-
 export function MorePage() {
   const { me, logout } = useSession();
   const [perm, setPerm] = useState<NotifyPermission>(notifyPermission);
-  const [canInstall, setCanInstall] = useState(!!deferredInstall);
+  const { canInstall, install } = usePwaInstall();
   const smart = useSmartEnabled();
   const desktop = useDesktop();
   const [warm, setWarm] = useState(() => { try { return clientStorage.getItem('qqmusic-warm') !== 'off'; } catch { return true; } });
   const toggleWarm = () => { const next=!warm; setWarm(next); try {clientStorage.setItem('qqmusic-warm',next?'on':'off');} catch {} if(!next)void request('POST','/api/listen/prepare',{json:{refs:[]}}).catch(()=>{}); };
   const standalone = window.matchMedia('(display-mode: standalone)').matches;
 
-  useEffect(() => {
-    const on = () => setCanInstall(!!deferredInstall);
-    window.addEventListener('beforeinstallprompt', on);
-    const installed = () => { deferredInstall = null; setCanInstall(false); };
-    window.addEventListener('appinstalled', installed);
-    return () => {
-      window.removeEventListener('beforeinstallprompt', on);
-      window.removeEventListener('appinstalled', installed);
-    };
-  }, []);
-
   const enableNotifications = async () => {
     const p = await requestNotifyPermission();
     setPerm(p);
     if (p === 'granted') toast('Уведомления включены', 'success');
     else if (p === 'denied') toast('Уведомления запрещены. Разрешите их в настройках сайта в браузере.', 'error');
-  };
-
-  const install = async () => {
-    if (!deferredInstall) return;
-    await deferredInstall.prompt();
-    await deferredInstall.userChoice.catch(() => undefined);
-    deferredInstall = null;
-    setCanInstall(false);
   };
 
   const doLogout = async () => {
@@ -92,6 +62,9 @@ export function MorePage() {
         </SettingsGroup>
         <SettingsGroup title="Музыка и устройства">
           <Item icon="playlist" to="/community" title="Музыка вместе" sub="Заявки, совместные плейлисты, устройства и общие ссылки" />
+          <Item icon="install" to="/install" title="QQMusic на телефоне" sub="Установка, жесты и экран блокировки" />
+          <Item icon="user" to="/welcome" title="Знакомство с QQMusic" sub="С чего начать и как выбрать музыку" />
+          {me.is_admin && <Item icon="refresh" to="/admin/server" title="Состояние сервера" sub="Место, очередь, источники и ошибки" />}
           {me.is_admin && <Item icon="library" to="/library-health" title="Проверка библиотеки" sub="Дубли, отсутствующие файлы и исправление тегов" />}
           <Item icon="upload" to="/upload" title="Загрузить файлы" sub="Добавить аудиофайлы в библиотеку" />
           <Item icon="library" to="/nextcloud" title="Nextcloud" sub="Личная музыка из вашего облака" />
@@ -137,6 +110,9 @@ export function MorePage() {
             right={<Switch on={smart} />}
           />
         )}
+        <Item icon="install" to="/install" title="QQMusic на телефоне" sub="Установка, жесты и экран блокировки" />
+        <Item icon="user" to="/welcome" title="Знакомство с QQMusic" sub="С чего начать и как выбрать музыку" />
+        {me.is_admin && <Item icon="refresh" to="/admin/server" title="Состояние сервера" sub="Место, очередь, источники и ошибки" />}
         {me.is_admin && <Item icon="library" to="/library-health" title="Проверка библиотеки" sub="Дубли, файлы и теги" />}
         <Item icon="playlist" to="/community" title="Музыка вместе" sub="Заявки, плейлисты, устройства и ссылки" />
         <Item icon="upload" to="/upload" title="Загрузить файлы" sub="Добавить свои аудиофайлы в библиотеку" />

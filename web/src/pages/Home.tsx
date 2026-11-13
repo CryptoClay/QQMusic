@@ -1,3 +1,4 @@
+import { PersonalHomeSections } from './Experience';
 import { api } from '../api/client';
 import { Icon, type IconName } from '../components/Icon';
 import { WaveCard } from '../components/Wave';
@@ -28,6 +29,7 @@ export function HomePage() {
         <h1 className={desktop ? 'text-3xl font-bold tracking-tight' : 'text-2xl font-bold'}>{greeting()}, {me.username}</h1>
         {desktop && <p className="mt-1 text-sm text-muted">Всё, что вы любите слушать — в одном месте</p>}
       </header>
+      <PersonalHomeSections />
       {desktop ? (
         <>
           <div className="grid grid-cols-[minmax(0,2fr)_minmax(280px,1fr)] items-stretch gap-3 px-4 pt-4">
