@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import './home-motion.css';
 
 @theme {
   --color-bg: #0b0b0b;
@@ -229,16 +230,3 @@
     animation: none;
   }
 }
-
-/* QQMusic's personal frequency: layered vinyl orbits, with motion only during playback. */
-.home-frequency { background: radial-gradient(ellipse at 85% 30%, #164c4a 0, transparent 58%), linear-gradient(120deg, #132526, #152c2d 60%, #29312d); }
-.home-frequency-art { position:absolute; inset:0; z-index:-1; pointer-events:none; overflow:hidden; }
-.home-frequency-art::after { content:""; position:absolute; inset:0; background:linear-gradient(90deg,#102a2be0 0%,#102a2b66 48%,transparent 80%); }
-.home-frequency-core { position:absolute; width:220px; height:220px; right:-45px; top:45px; border-radius:50%; background:radial-gradient(circle at 38% 36%, #ffc183, #e2814e 38%, #b54e43 60%, #603f51 80%); box-shadow:0 0 80px #f7954233, inset -20px -15px 35px #252d3c88; }
-.home-frequency-orbit { position:absolute; width:330px; height:330px; right:-100px; top:0; border-radius:50%; border:1px solid #8ddbd04d; box-shadow:0 0 0 24px #87d9ce0a,0 0 0 48px #87d9ce08,0 0 0 72px #87d9ce05; transform:rotate(-28deg) scaleY(.72); }
-.home-frequency-rings { position:absolute; width:310px; height:310px; right:-90px; top:0; border-radius:50%; border:2px solid #bbded24d; transform:rotate(35deg) scaleX(.43); }
-.home-frequency.is-playing .home-frequency-rings { animation:frequency-turn 18s linear infinite; }
-.home-mix::before { content:''; pointer-events:none; position:absolute; z-index:-1; width:210px; height:210px; right:-90px; top:0; border-radius:40px; border:1px solid #b797dd25; box-shadow:0 0 0 24px #b797dd08,0 0 0 48px #b797dd05; transform:rotate(-28deg); }
-@keyframes frequency-turn { from { transform:rotate(35deg) scaleX(.43); } to { transform:rotate(395deg) scaleX(.43); } }
-@media (min-width:600px) { .home-frequency-core { width:260px; height:260px; right:-20px; } .home-frequency-orbit { width:380px; height:380px; right:-75px; top:-5px; } .home-frequency-rings { width:350px; height:350px; right:-60px; } }
-@media (prefers-reduced-motion:reduce) { .home-frequency.is-playing .home-frequency-rings { animation:none; } }

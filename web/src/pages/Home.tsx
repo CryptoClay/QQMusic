@@ -20,7 +20,7 @@ export function HomePage() {
   const desktop = useDesktop();
 
   return (
-    <div className="pb-4">
+    <div className="home-page pb-4">
       <header
         className={
           desktop
@@ -138,7 +138,7 @@ function Shortcut({
   return (
     <Link
       to={to}
-      className="group flex min-h-20 min-w-0 items-center gap-2 rounded-2xl bg-white/[.035] px-3 py-3 transition hover:bg-white/[.075]"
+      className="home-shortcut group flex min-h-20 min-w-0 items-center gap-2 rounded-2xl bg-white/[.035] px-3 py-3 transition hover:bg-white/[.075]"
     >
       <span className={`flex h-8 w-8 shrink-0 sm:h-10 sm:w-10 items-center justify-center rounded-xl ${color}`}>
         <Icon name={icon} size={21} />

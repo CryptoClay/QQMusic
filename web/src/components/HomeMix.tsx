@@ -1,3 +1,4 @@
+import { AmbientArt } from './AmbientArt';
 import { api } from '../api/client';
 import { useAsync, useInterval } from '../lib/hooks';
 import { Link } from '../lib/router';
@@ -16,12 +17,14 @@ export function HomeMix() {
   if (res.loading && !today)
     return (
       <div className={card} role="status">
+        <AmbientArt variant="mix" />
         <Spinner /> <span className="mt-3 text-sm text-muted">Загружаем микс…</span>
       </div>
     );
   if (res.error && !today)
     return (
       <div className={card}>
+        <AmbientArt variant="mix" />
         <h2 className="text-xl font-bold">Микс дня</h2>
         <p className="mt-3 text-sm text-muted">Не удалось загрузить микс.</p>
         <button type="button" className="mt-4 text-sm text-[#d2b7ff] underline" onClick={() => res.reload()}>
@@ -33,6 +36,7 @@ export function HomeMix() {
   if (today.mix)
     return (
       <Link to={`/mix/${today.mix.id}`} className={`${card} transition hover:bg-[#30293e]`}>
+        <AmbientArt variant="mix" />
         <span className="text-xs font-semibold uppercase tracking-wide text-[#c8b9e5]">Ваша подборка</span>
         <h2 className="mt-4 text-2xl font-bold">Микс дня</h2>
         <p className="mt-2 line-clamp-2 text-sm text-[#c7c0d5]">{today.mix.description || today.mix.title}</p>
@@ -49,6 +53,7 @@ export function HomeMix() {
   if (today.building)
     return (
       <div className={card} role="status">
+        <AmbientArt variant="mix" />
         <Spinner className="text-[#ff9349]" />
         <h2 className="mt-4 text-xl font-bold">Собираем микс дня</h2>
         <p className="mt-2 text-sm text-muted">Подбираем музыку по вашему вкусу.</p>
@@ -57,6 +62,7 @@ export function HomeMix() {
   if (today.onboarding)
     return (
       <Link to="/taste" className={`${card} transition hover:bg-[#30293e]`}>
+        <AmbientArt variant="mix" />
         <Icon name="sparkle" className="text-[#ff9349]" />
         <h2 className="mt-4 text-xl font-bold">Что вы слушаете?</h2>
         <p className="mt-2 text-sm text-muted">Выберите исполнителей, чтобы собрать первый микс.</p>
@@ -65,6 +71,7 @@ export function HomeMix() {
     );
   return (
     <div className={card}>
+      <AmbientArt variant="mix" />
       <h2 className="text-xl font-bold">Микс дня</h2>
       <p className="mt-3 text-sm text-muted">Следующий микс появится в {today.settings.mix_hour}:00.</p>
     </div>

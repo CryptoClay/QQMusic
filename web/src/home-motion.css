@@ -1,0 +1,370 @@
+/* Home has its own colour and motion vocabulary. Audio state only changes its intensity. */
+.home-page {
+  position: relative;
+  isolation: isolate;
+}
+.home-page::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: -24px 0 auto;
+  height: 650px;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 20% 15%, #ff93490a, transparent 55%),
+    radial-gradient(ellipse at 90% 45%, #ac75ff0b, transparent 55%);
+}
+.home-frequency {
+  background:
+    radial-gradient(ellipse at 90% 15%, #156c65, transparent 65%),
+    linear-gradient(120deg, #102d30, #16413e 65%, #3f4e36);
+  border: 1px solid #83e9d323;
+  box-shadow:
+    0 12px 50px #061c2440,
+    inset 0 1px #caffef12;
+}
+.ambient-art {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+.ambient-art::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, #102b30ef, #102b3060 48%, transparent 82%);
+}
+.ambient-halo {
+  position: absolute;
+  right: -15%;
+  top: -30%;
+  width: 85%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, #73ffe780, #2fd6c33b 35%, transparent 65%);
+  animation: home-breathe 9s ease-in-out infinite alternate;
+}
+.ambient-ribbon {
+  position: absolute;
+  width: 340px;
+  height: 340px;
+  top: -20px;
+  right: -65px;
+  border-radius: 42% 58% 62% 38% / 40% 42% 58% 60%;
+  border: 1px solid #b7ffe78a;
+  box-shadow:
+    0 0 0 18px #75f8d914,
+    0 0 0 38px #75f8d90a,
+    0 0 0 62px #75f8d907;
+  animation: home-orbit 32s linear infinite;
+}
+.ambient-disc {
+  position: absolute;
+  width: 245px;
+  height: 245px;
+  right: -20px;
+  top: 50px;
+  border-radius: 40% 60% 55% 45% / 46% 38% 62% 54%;
+  background:
+    radial-gradient(ellipse at 26% 20%, #ffe6a8, transparent 48%),
+    conic-gradient(from 20deg, #ffac59, #f06c7b, #c25af3, #38c7ba, #ffb663, #ffac59);
+  box-shadow:
+    0 0 65px #ffac4938,
+    inset -12px -18px 30px #5a257a44,
+    inset 0 2px 12px #ffedc87a;
+  animation: home-float 12s ease-in-out infinite alternate;
+}
+.ambient-disc i {
+  position: absolute;
+  inset: 12%;
+  border: 1px solid #ffefcc70;
+  border-radius: 50%;
+  transform: rotate(-25deg) scaleX(0.45);
+}
+.ambient-disc b {
+  position: absolute;
+  inset: -12%;
+  border: 1px solid #defff97a;
+  border-radius: 50%;
+  transform: rotate(35deg) scaleX(0.55);
+}
+.ambient-satellite {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  right: 40%;
+  top: 28%;
+  border-radius: 50%;
+  background: #b9ffdf;
+  box-shadow: 0 0 24px #63efcf88;
+  animation: home-satellite 11s ease-in-out infinite alternate;
+}
+.ambient-signal {
+  position: absolute;
+  right: 38px;
+  bottom: 52px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0.65;
+}
+.ambient-signal i {
+  width: 3px;
+  height: 7px;
+  border-radius: 3px;
+  background: #d2ffe9;
+  transition: height 0.4s;
+}
+.home-frequency.is-playing .ambient-signal i {
+  animation: home-signal 1.1s ease-in-out infinite alternate;
+}
+.home-frequency.is-playing .ambient-disc {
+  animation-duration: 5s;
+}
+.home-frequency.is-playing .ambient-ribbon {
+  animation-duration: 18s;
+}
+.home-live-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #92ffcf;
+  box-shadow: 0 0 12px #92ffcf90;
+}
+.home-wave-button {
+  box-shadow: 0 5px 28px #ff93493d;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s,
+    background-color 0.2s;
+}
+.home-wave-button:active {
+  transform: scale(0.96);
+}
+.home-mix {
+  background:
+    radial-gradient(ellipse at 100% 100%, #a847bb66, transparent 65%),
+    linear-gradient(140deg, #35305c, #302340 60%, #45274b);
+  border-color: #c99eff30;
+  box-shadow: inset 0 1px #f3d5ff12;
+}
+.ambient-mix::after {
+  background: linear-gradient(180deg, #28234166, #282341b3 48%, transparent);
+}
+.ambient-mix .ambient-halo {
+  background: radial-gradient(circle, #e99bff70, #bc74fd20 40%, transparent 66%);
+  top: 15%;
+  right: -20%;
+}
+.ambient-mix .ambient-ribbon {
+  display: none;
+}
+.ambient-mix .ambient-disc {
+  width: 180px;
+  height: 180px;
+  top: auto;
+  bottom: -50px;
+  right: -35px;
+  border-radius: 50%;
+  background:
+    repeating-radial-gradient(circle, #100f2d00 0 5px, #f5c6ff18 6px 7px),
+    conic-gradient(#b68cff, #523378, #ec92c7, #6941aa, #b68cff);
+  box-shadow:
+    0 0 45px #be6cfe30,
+    inset 0 0 0 1px #ffd4ff30;
+  animation: home-record 35s linear infinite;
+}
+.ambient-mix .ambient-disc i {
+  inset: 37%;
+  border: 0;
+  transform: none;
+  background: #ffb384;
+  box-shadow: 0 0 0 1px #fff3;
+}
+.ambient-mix .ambient-disc b {
+  inset: 48%;
+  background: #302340;
+  border: 0;
+  transform: none;
+}
+.ambient-mix .ambient-satellite {
+  top: auto;
+  bottom: 45px;
+  right: 43%;
+  width: 7px;
+  height: 7px;
+  background: #dca1ff;
+}
+.ambient-art[data-moving] *,
+.home-frequency.is-playing .ambient-art[data-moving] * {
+  animation-play-state: paused;
+}
+.ambient-art[data-moving='true'] *,
+.home-frequency.is-playing .ambient-art[data-moving='true'] * {
+  animation-play-state: running;
+}
+.home-shortcut {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #ffffff08;
+  transition:
+    transform 0.22s,
+    border-color 0.22s,
+    box-shadow 0.22s;
+}
+.home-shortcut::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  background: linear-gradient(115deg, var(--shortcut-glow), transparent 75%);
+  transition: opacity 0.22s;
+}
+.home-shortcut > span {
+  position: relative;
+}
+.home-shortcut:nth-child(1) {
+  --shortcut-glow: #ff6e7d30;
+}
+.home-shortcut:nth-child(2) {
+  --shortcut-glow: #ad7bff30;
+}
+.home-shortcut:nth-child(3) {
+  --shortcut-glow: #4de3ca30;
+}
+.home-shortcut:nth-child(4) {
+  --shortcut-glow: #ffc26030;
+}
+.home-page :is(a, button):focus-visible {
+  outline: 2px solid #ffb477;
+  outline-offset: 4px;
+}
+.home-shortcut:active {
+  transform: scale(0.98);
+}
+.home-page > header,
+.home-page > div:has(> .home-frequency),
+.home-page > div:has(> .home-shortcut) {
+  animation: home-arrive 0.65s ease-out both;
+}
+.home-page > div:has(> .home-frequency) {
+  animation-delay: 0.07s;
+}
+.home-page > div:has(> .home-shortcut) {
+  animation-delay: 0.14s;
+}
+.home-page section[aria-label] a,
+.home-page section[aria-label] button {
+  transition:
+    transform 0.22s,
+    filter 0.22s;
+}
+@media (hover: hover) and (pointer: fine) {
+  .home-shortcut:hover {
+    transform: translateY(-3px);
+    border-color: #ffffff25;
+    box-shadow: 0 8px 25px #0003;
+  }
+  .home-shortcut:hover::before {
+    opacity: 1;
+  }
+  .home-shortcut:hover > span:first-child {
+    transform: rotate(-7deg) scale(1.08);
+  }
+  .home-shortcut > span:first-child {
+    transition: transform 0.25s;
+  }
+  .home-wave-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 35px #ff934966;
+  }
+  a.home-mix:hover {
+    border-color: #dfb1ff70;
+  }
+  .home-page section[aria-label] a:hover,
+  .home-page section[aria-label] button:hover {
+    transform: translateY(-3px);
+    filter: brightness(1.12);
+  }
+}
+@media (min-width: 600px) {
+  .ambient-wave .ambient-disc {
+    width: 280px;
+    height: 280px;
+    top: 38px;
+  }
+  .ambient-wave .ambient-ribbon {
+    width: 380px;
+    height: 380px;
+    right: -55px;
+  }
+  .ambient-mix .ambient-disc {
+    width: 220px;
+    height: 220px;
+    bottom: -65px;
+  }
+}
+@keyframes home-float {
+  from {
+    transform: translate(-4px, -8px) rotate(-12deg);
+    border-radius: 40% 60% 55% 45% / 46% 38% 62% 54%;
+  }
+  to {
+    transform: translate(8px, 12px) rotate(14deg);
+    border-radius: 58% 42% 40% 60% / 55% 60% 40% 45%;
+  }
+}
+@keyframes home-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes home-record {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes home-breathe {
+  to {
+    transform: translate(-15px, 20px) scale(1.12);
+    opacity: 0.6;
+  }
+}
+@keyframes home-satellite {
+  to {
+    transform: translate(12px, -18px);
+  }
+}
+@keyframes home-signal {
+  to {
+    height: 24px;
+  }
+}
+@keyframes home-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-page *,
+  .home-page *::before,
+  .home-page *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+  .home-page a:hover,
+  .home-page button:hover,
+  .home-page a:active,
+  .home-page button:active {
+    transform: none !important;
+  }
+}

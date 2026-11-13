@@ -1,3 +1,4 @@
+import { AmbientArt } from './AmbientArt';
 import { toggle, useListen } from '../lib/listen';
 import { canWave, startWave, useWave } from '../lib/wave';
 import { Icon } from './Icon';
@@ -34,13 +35,12 @@ export function WaveHero() {
     <section
       className={`home-frequency relative isolate flex min-h-[330px] overflow-hidden rounded-3xl p-6 text-white sm:min-h-[360px] sm:p-8 ${running ? 'is-playing' : ''}`}
     >
-      <div aria-hidden="true" className="home-frequency-art">
-        <div className="home-frequency-orbit" />
-        <div className="home-frequency-core" />
-        <div className="home-frequency-rings" />
-      </div>
+      <AmbientArt variant="wave" />
       <div className="relative z-10 flex max-w-[85%] flex-col items-start sm:max-w-[70%]">
-        <span className="text-[10px] font-semibold uppercase tracking-[.24em] text-[#9bd7d2]">QQMusic / Моя волна</span>
+        <span className="inline-flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.24em] text-[#a6f2e6]">
+          <span className="home-live-dot" aria-hidden="true" />
+          QQMusic / Моя волна
+        </span>
         <h2 className="mt-7 text-4xl font-bold leading-[1.05] tracking-tight sm:text-5xl">
           Твоя
           <br />
@@ -54,7 +54,7 @@ export function WaveHero() {
           onClick={() => (on ? toggle() : void startWave(null, 'home_card'))}
           disabled={starting !== null}
           aria-label={label}
-          className="mt-7 inline-flex min-h-12 items-center gap-3 rounded-full bg-[#ff9349] py-3 pl-4 pr-6 text-sm font-bold text-[#291406] transition hover:bg-[#ffa86d] disabled:opacity-70"
+          className="home-wave-button mt-7 inline-flex min-h-12 items-center gap-3 rounded-full bg-[#ff9349] py-3 pl-4 pr-6 text-sm font-bold text-[#291406] transition hover:bg-[#ffa86d] disabled:opacity-70"
         >
           {busy ? <Spinner size={19} /> : running ? <Icon name="pause" size={19} /> : <Icon name="play" size={19} />}{' '}
           {running ? 'Пауза' : on ? 'Продолжить' : 'Поймать волну'}
