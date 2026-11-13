@@ -19,7 +19,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import admin_user, current_user
 from app.db import get_session, session_scope
 from app.insights import analytics, launches, names
-from app.models import DownloadItem, MusicEditorial, MusicPreferences, MusicPrivate, Track, User, utcnow
+from app.models import (
+    DownloadItem,
+    MusicEditorial,
+    MusicPreferences,
+    MusicPrivate,
+    Track,
+    User,
+    VersionMember,
+    VersionPreference,
+    utcnow,
+)
 
 router = APIRouter(prefix="/api/music", tags=["music"])
 Ref = Annotated[str, Field(min_length=3, max_length=200, pattern=r"^(?:dz|hm|mb|nd|file):[^\s]+$")]
@@ -172,6 +182,18 @@ async def stored_version_ref(s, ref, choice=None):
 async def preferred_ref(user, choice):
     """A preference never mutates the shared resolver cache or another user's pick."""
     async with session_scope() as s:
+        track = None
+        if getattr(choice, "nd_song_id", None):
+            track = await s.scalar(select(Track).where(Track.nd_song_id == choice.nd_song_id))
+        elif choice.ref.startswith("dz:"):
+            track = await s.scalar(select(Track).where(Track.deezer_track_id == choice.ref[3:]).order_by(Track.id))
+        member = await s.get(VersionMember, track.id) if track else None
+        selected = await s.get(VersionPreference, (user.id, member.group_id)) if member else None
+        if selected and selected.track_id:
+            target = await s.get(Track, selected.track_id)
+            target_member = await s.get(VersionMember, selected.track_id)
+            if target and target.nd_song_id and target_member and target_member.group_id == member.group_id:
+                return "nd:" + target.nd_song_id
         pref = await s.get(MusicPreferences, user.id)
         if not pref or not pref.data_json.get("prefer_original"):
             return choice.ref

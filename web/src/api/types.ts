@@ -870,6 +870,7 @@ export interface BatchEvent {
 }
 
 export interface HubEventMap {
+  community: { changed: boolean };
   download: DownloadItemOut;
   assistant: AssistantEvent;
   library: LibraryEvent;

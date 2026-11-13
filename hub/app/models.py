@@ -179,6 +179,7 @@ class Track(Base):
     album_id: Mapped[int | None] = mapped_column(ForeignKey("albums.id", ondelete="SET NULL"), index=True)
     path: Mapped[str] = mapped_column(String(1024), unique=True)  # relative to library/, forward slashes
     nd_song_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    size_bytes: Mapped[int | None] = mapped_column(Integer)
     artist: Mapped[str] = mapped_column(String(512))
     title: Mapped[str] = mapped_column(String(512))
     album: Mapped[str | None] = mapped_column(String(512))
@@ -669,4 +670,94 @@ class SmartHidden(Base):
     nd_song_id: Mapped[str | None] = mapped_column(String(64))
     artist: Mapped[str] = mapped_column(String(256), default="", server_default="")
     title: Mapped[str] = mapped_column(String(256), default="", server_default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class MusicRequest(Base):
+    __tablename__ = "music_requests"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(10), default="track")
+    artist: Mapped[str] = mapped_column(String(512))
+    title: Mapped[str] = mapped_column(String(512))
+    ref: Mapped[str | None] = mapped_column(String(200))
+    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    note: Mapped[str] = mapped_column(Text, default="")
+    batch_id: Mapped[int | None] = mapped_column(ForeignKey("download_batches.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class CommunityPlaylist(Base):
+    __tablename__ = "community_playlists"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    members_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    items_json: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class InboxMessage(Base):
+    __tablename__ = "inbox_messages"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    text: Mapped[str] = mapped_column(String(1000))
+    target: Mapped[str] = mapped_column(String(200), default="/requests")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class UserPolicy(Base):
+    __tablename__ = "user_policies"
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    max_queue: Mapped[int] = mapped_column(Integer, default=0)
+    storage_mb: Mapped[int] = mapped_column(Integer, default=0)
+    upload_mb: Mapped[int] = mapped_column(Integer, default=0)
+    parallel: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class ResumeState(Base):
+    __tablename__ = "resume_states"
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    device: Mapped[str] = mapped_column(String(100), primary_key=True)
+    data_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class VersionGroup(Base):
+    __tablename__ = "version_groups"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(512))
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+
+
+class VersionMember(Base):
+    __tablename__ = "version_members"
+    track_id: Mapped[int] = mapped_column(ForeignKey("tracks.id", ondelete="CASCADE"), primary_key=True)
+    group_id: Mapped[int] = mapped_column(ForeignKey("version_groups.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(20), default="other")
+
+
+class VersionPreference(Base):
+    __tablename__ = "version_preferences"
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    group_id: Mapped[int] = mapped_column(ForeignKey("version_groups.id", ondelete="CASCADE"), primary_key=True)
+    track_id: Mapped[int | None] = mapped_column(ForeignKey("tracks.id", ondelete="SET NULL"))
+
+
+class ShareLink(Base):
+    __tablename__ = "share_links"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    token_enc: Mapped[str | None] = mapped_column(String(512))
+    name: Mapped[str] = mapped_column(String(200))
+    access: Mapped[str] = mapped_column(String(20), default="public")
+    collection_id: Mapped[int | None] = mapped_column(ForeignKey("community_playlists.id", ondelete="SET NULL"))
+    tracks_json: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

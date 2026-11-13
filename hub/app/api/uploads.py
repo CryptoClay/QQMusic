@@ -24,7 +24,7 @@ from app.jobs.downloads import enqueue_scan
 from app.jobs.queue import notify
 from app.library import probe, tagger
 from app.library.importer import ImportSpec, import_file
-from app.models import Album, Upload, User
+from app.models import Album, Upload, User, UserPolicy
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/uploads", tags=["uploads"])
@@ -58,37 +58,69 @@ def _copy_limited(src, dest: Path, limit: int) -> int:
     return n
 
 
+async def upload_io(fn, *args):
+    """Let a file operation close its descriptor before cancellation cleans up paths."""
+    task = asyncio.create_task(asyncio.to_thread(fn, *args))
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        try:
+            await task
+        except Exception:
+            pass
+        raise
+
+
 @router.post("", response_model=list[UploadOut])
 async def upload(files: list[UploadFile] = File(...), user: User = Depends(current_user),
                  s: AsyncSession = Depends(get_session, scope="function")):
     cfg = get_settings().cfg.uploads
     limit = cfg.max_file_mb * 1024 * 1024
+    policy = await s.get(UserPolicy, user.id)
+    if policy and policy.upload_mb:
+        limit = min(limit, policy.upload_mb * 1024 * 1024)
     out = []
-    for f in files:
-        name = Path(f.filename or "file").name
-        ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
-        if ext not in cfg.extensions:
-            raise HTTPException(415, f"Формат не поддерживается: {name}")
-        rel = Path("uploads") / str(user.id) / f"{uuid.uuid4().hex}.{ext}"
-        dest = get_settings().staging_dir / rel
-        _upload_dir(user.id)
-        try:
-            size = await asyncio.to_thread(_copy_limited, f.file, dest, limit)
-        except ValueError:
-            dest.unlink(missing_ok=True)
-            raise HTTPException(413, f"Файл больше {cfg.max_file_mb} МБ: {name}") from None
-        try:
-            tags = await asyncio.to_thread(tagger.read_tags, dest)
-        except Exception as e:
-            dest.unlink(missing_ok=True)
-            raise HTTPException(400, f"Не удалось прочитать файл {name}: {e}") from e
-        if not tags.get("title"):
-            tags["title"] = name.rsplit(".", 1)[0]
-        u = Upload(user_id=user.id, staging_path=rel.as_posix(), orig_name=name, size=size,
-                   probed_tags_json=json.loads(json.dumps(tags, default=str)))
-        s.add(u)
-        await s.flush()
-        out.append(upload_out(u))
+    created = []
+    try:
+        for f in files:
+            name = Path(f.filename or "file").name
+            ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+            if ext not in cfg.extensions:
+                raise HTTPException(415, f"Формат не поддерживается: {name}")
+            rel = Path("uploads") / str(user.id) / f"{uuid.uuid4().hex}.{ext}"
+            dest = get_settings().staging_dir / rel
+            created.append(dest)
+            _upload_dir(user.id)
+            try:
+                size = await upload_io(_copy_limited, f.file, dest, limit)
+            except ValueError:
+                dest.unlink(missing_ok=True)
+                raise HTTPException(413, f"Файл больше {limit // (1024 * 1024)} МБ: {name}") from None
+            try:
+                tags = await upload_io(tagger.read_tags, dest)
+            except Exception as e:
+                dest.unlink(missing_ok=True)
+                raise HTTPException(400, f"Не удалось прочитать файл {name}: {e}") from e
+            if not tags.get("title"):
+                tags["title"] = name.rsplit(".", 1)[0]
+            from app.budgets import storage_budget
+            try:
+                await storage_budget(s, user.id, size)
+            except HTTPException:
+                dest.unlink(missing_ok=True)
+                raise
+            u = Upload(user_id=user.id, staging_path=rel.as_posix(), orig_name=name, size=size,
+                       probed_tags_json=json.loads(json.dumps(tags, default=str)))
+            s.add(u)
+            await s.flush()
+            out.append(upload_out(u))
+    except BaseException:
+        # The session rolls back the entire multipart batch. Remove every file
+        # from this attempt too, including earlier successful parts.
+        for path in created:
+            await asyncio.to_thread(path.unlink, missing_ok=True)
+        raise
+
     return out
 
 

@@ -43,6 +43,8 @@ def test_full_recovery_with_wal_and_encrypted_connections(tmp_path, recovery):
         db.execute("INSERT INTO users VALUES (?)", (cipher.encrypt(b"user password").decode(),))
         db.execute("CREATE TABLE nextcloud_connections (password_enc TEXT)")
         db.execute("INSERT INTO nextcloud_connections VALUES (?)", (cipher.encrypt(b"cloud password").decode(),))
+        db.execute("CREATE TABLE share_links (token_enc TEXT)")
+        db.execute("INSERT INTO share_links VALUES (?)", (cipher.encrypt(b"test-only-share-token").decode(),))
         db.execute("CREATE TABLE nextcloud_playlists (items_json TEXT)")
         db.execute(
             "INSERT INTO nextcloud_playlists VALUES (?)",
@@ -64,7 +66,7 @@ def test_full_recovery_with_wal_and_encrypted_connections(tmp_path, recovery):
         )
     assert b"private test cookies" not in archive.read_bytes()
     result = recovery.restore(archive, tmp_path / "restored", "long backup passphrase")
-    assert result["library_files"] == 1 and result["decrypted_secrets"] == 3
+    assert result["library_files"] == 1 and result["decrypted_secrets"] == 4
     assert (tmp_path / "restored/music/library/song.mp3").read_bytes() == b"media" * 10000
     with pytest.raises(ValueError):
         recovery.restore(archive, tmp_path / "restored", "long backup passphrase")

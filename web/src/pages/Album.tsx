@@ -12,7 +12,7 @@ import { listen } from '../lib/listen';
 import { fmtLength, recordTypeLabel, tracksWord, yearOf } from '../lib/format';
 import { useAsync } from '../lib/hooks';
 import { canPlay, canPlayAll, playList, playTracks } from '../lib/player';
-import { Link, enc, goBack } from '../lib/router';
+import { Link, enc, goBack, navigate } from '../lib/router';
 import { attempt, toast } from '../lib/ui';
 
 export function AlbumPage({ refId }: { refId: string }) {
@@ -184,6 +184,7 @@ export function AlbumPage({ refId }: { refId: string }) {
         </Button>
       </div>
 
+      <div className="px-4 pb-3"><Button small icon="note" onClick={()=>navigate(`/requests?kind=album&ref=${encodeURIComponent(album.ref)}&artist=${encodeURIComponent(album.artist)}&title=${encodeURIComponent(album.title)}`)}>Попросить добавить альбом</Button></div>
       <MusicProfile kind="album" refId={refId} onCover={setCustomCover}/>
       <section aria-label="Треки" className="pt-2">
         {discs.map(([disc, list]) => (

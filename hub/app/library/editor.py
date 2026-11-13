@@ -20,7 +20,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.library import tagger
-from app.library.importer import _move, _write_cover_file, album_reldir, library_abs, library_lock, tagdata_for
+from app.library.importer import (
+    _move,
+    _write_cover_file,
+    album_reldir,
+    begin_library_write,
+    library_abs,
+    library_lock,
+    tagdata_for,
+)
 from app.library.layout import track_filename, unique_path
 from app.matching.normalize import fingerprint
 from app.models import Album, Track
@@ -70,6 +78,8 @@ async def relocate_track(s: AsyncSession, track: Track, album: Album, *, cover: 
 
 
 async def update_album(s: AsyncSession, album: Album, *, _locked: bool = False, **fields) -> Album:
+    if not _locked:
+        await begin_library_write(s)
     async with (nullcontext() if _locked else library_lock):
         old_dir = library_abs(album_reldir(album))
         change_genre = "genre" in fields and fields["genre"] != album.genre
@@ -93,6 +103,7 @@ async def update_album(s: AsyncSession, album: Album, *, _locked: bool = False, 
 
 async def set_album_cover(s: AsyncSession, album: Album, image: bytes) -> Album:
     cover = await asyncio.to_thread(tagger.prepare_cover, image)
+    await begin_library_write(s)
     async with library_lock:
         d = library_abs(album_reldir(album))
         await asyncio.to_thread(_write_cover_file, d, cover)
@@ -108,6 +119,8 @@ async def set_album_cover(s: AsyncSession, album: Album, image: bytes) -> Album:
 
 async def move_tracks(s: AsyncSession, track_ids: list[int], target: Album, *, _locked: bool = False) -> list[Album]:
     """Move tracks into `target`; returns source albums that became empty (already deleted)."""
+    if not _locked:
+        await begin_library_write(s)
     async with (nullcontext() if _locked else library_lock):
         cover = await _album_cover(target)
         tracks = (await s.execute(select(Track).where(Track.id.in_(track_ids)))).scalars().all()
@@ -137,6 +150,8 @@ async def merge_albums(s: AsyncSession, source_ids: list[int], target: Album, *,
 
 
 async def update_track(s: AsyncSession, track: Track, *, _locked: bool = False, **fields) -> Track:
+    if not _locked:
+        await begin_library_write(s)
     async with (nullcontext() if _locked else library_lock):
         for k, v in fields.items():
             if v is not None or k not in {"title", "artist"}:
@@ -156,6 +171,7 @@ async def update_track(s: AsyncSession, track: Track, *, _locked: bool = False, 
 
 async def trash_track(s: AsyncSession, track: Track) -> None:
     """Move the file to MUSIC_ROOT/.trash/<date>/<path> (purged after N days) and delete the row."""
+    await begin_library_write(s)
     async with library_lock:
         src = library_abs(track.path)
         if src.is_file():

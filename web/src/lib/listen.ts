@@ -1008,3 +1008,15 @@ function mediaSession(track: ListenTrack) {
     /* an action the browser doesn't know */
   }
 }
+
+
+/** Explicitly continue a saved device queue, preserving its order and selected position. */
+export function resumeRemote(queue: readonly ListenTrack[], index: number, position: number) {
+  if (!queue.length || index < 0 || index >= queue.length) return;
+  listContext = 'other';
+  listLaunch = newLaunch('other');
+  smartHooks?.listStarted('other');
+  set({ smart: false });
+  start(queue, index, false, position);
+}
+export const listeningDevice = () => deviceId;

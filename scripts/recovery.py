@@ -209,7 +209,8 @@ def verify(destination: Path) -> dict:
     decrypted = 0
     with sqlite3.connect(destination / "hub/hub.sqlite3") as db:
         tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        for table, column in [("users", "nd_password_enc"), ("nextcloud_connections", "password_enc")]:
+        for table, column in [("users", "nd_password_enc"), ("nextcloud_connections", "password_enc"),
+                              ("share_links", "token_enc")]:
             if table in tables:
                 for (value,) in db.execute(f"SELECT {column} FROM {table}"):
                     if value:

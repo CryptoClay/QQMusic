@@ -611,3 +611,26 @@ The metadata is optional: clients fall back to the historical full APK when abse
 `POST /api/library/preview` accepts `{action: "track"|"album"|"merge"|"move", id, ids?: number[], fields?: object}`. `id` is the edited record or target album; `ids` are source albums for merge or tracks for move. Returns before/after changes, files, warnings and an encrypted, user-bound token valid for 10 minutes. `POST /api/library/apply` takes `{token}`; returns `{ok, album_id}`. A stale/expired preview or missing file returns 409. Both endpoints require admin. Existing library read endpoints remain available to signed-in users; existing shared-library mutation endpoints require admin, except creating a new album.
 
 See [library maintenance](../docs/library-care.md) for filesystem rollback, backup space and identity guarantees.
+
+
+## Community and sharing
+
+All `/api/community/*` routes require a session and return private, non-cacheable data.
+
+| Routes | Access |
+| --- | --- |
+| `GET/POST /api/community/requests`, `DELETE /requests/{id}` | Own requests; administrators see all; cancel own pending only |
+| `POST /api/community/requests/{id}/decision` | Admin approve/reject; queue charged to requester |
+| `GET /api/community/inbox`, `POST /inbox/read` | Own messages; read takes up to 100 ids, `[]` marks all own messages |
+| `GET/POST /api/community/playlists`, `GET/PATCH /playlists/{id}` | Owner/editor/listener membership; PATCH requires revision |
+| `GET /api/community/library-search?q=` | Local scanned tracks, at most 50 |
+| `GET /api/community/limits` | Own limits and usage |
+| `GET /api/community/limits/users`, `PUT /limits/users/{id}` | Admin; zero values inherit existing unrestricted defaults |
+| `GET /api/community/resume`, `PUT/DELETE /resume/{device}` | Own device snapshots; PUT account must match session |
+| `GET /api/community/versions` | Groups and current user's preference |
+| `POST /api/community/versions`, `PUT/DELETE /versions/{id}` | Admin; PUT requires revision; no file deletion |
+| `PUT /api/community/versions/{id}/preference` | Own preference; track_id must belong to group; null resets |
+| `GET/POST /api/community/shares`, `DELETE /shares/{id}` | Own links; playlist link requires ownership |
+| `GET /api/public/{token}`, `GET/HEAD /api/public/{token}/audio/{uid}` | Scoped capability, expiry and revocation; members mode also checks current membership |
+
+Public audio only serves snapshot UUIDs from local files, supports Range, and never invokes the authenticated resolver or accesses Nextcloud. See [community documentation](../docs/community.md) for limits, data migration and privacy boundaries.

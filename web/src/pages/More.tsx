@@ -91,6 +91,7 @@ export function MorePage() {
           <Item icon="bell" title="Уведомления" sub={permText[perm]} onClick={perm === 'default' ? enableNotifications : undefined} right={perm === 'granted' ? <Icon name="check" size={20} className="text-accent" /> : undefined} />
         </SettingsGroup>
         <SettingsGroup title="Музыка и устройства">
+          <Item icon="playlist" to="/community" title="Музыка вместе" sub="Заявки, совместные плейлисты, устройства и общие ссылки" />
           {me.is_admin && <Item icon="library" to="/library-health" title="Проверка библиотеки" sub="Дубли, отсутствующие файлы и исправление тегов" />}
           <Item icon="upload" to="/upload" title="Загрузить файлы" sub="Добавить аудиофайлы в библиотеку" />
           <Item icon="library" to="/nextcloud" title="Nextcloud" sub="Личная музыка из вашего облака" />
@@ -137,6 +138,7 @@ export function MorePage() {
           />
         )}
         {me.is_admin && <Item icon="library" to="/library-health" title="Проверка библиотеки" sub="Дубли, файлы и теги" />}
+        <Item icon="playlist" to="/community" title="Музыка вместе" sub="Заявки, плейлисты, устройства и ссылки" />
         <Item icon="upload" to="/upload" title="Загрузить файлы" sub="Добавить свои аудиофайлы в библиотеку" />
         <Item icon="library" to="/nextcloud" title="Nextcloud" sub="Личная музыка из вашего облака" />
         <Item icon="playlist" to="/playlists" title="Плейлисты" sub="Ваши плейлисты в Navidrome" />

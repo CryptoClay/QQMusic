@@ -97,7 +97,12 @@ def background_slots() -> int:
 
 # a queued job a worker may take now: urgent, or background while a background slot is free
 _CLAIMABLE = (
-    "status='queued' AND kind != 'assistant_task' AND (priority >= 0 OR "
+    "status='queued' AND kind != 'assistant_task' AND "
+    "(kind != 'download_item' OR NOT EXISTS (SELECT 1 FROM user_policies p "
+    "WHERE p.user_id=(SELECT d.user_id FROM download_items d WHERE d.id=json_extract(jobs.payload_json,'$.item_id')) "
+    "AND p.parallel > 0 AND (SELECT COUNT(*) FROM jobs r JOIN download_items d "
+    "ON d.id=json_extract(r.payload_json,'$.item_id') WHERE r.kind='download_item' AND r.status='running' "
+    "AND d.user_id=p.user_id) >= p.parallel)) AND (priority >= 0 OR "
     "(SELECT COUNT(*) FROM jobs WHERE status='running' AND priority < 0) < :bg)"
 )
 

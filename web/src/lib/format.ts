@@ -46,6 +46,14 @@ export function fmtWhen(iso?: string | null): string {
   return `${d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })} в ${time}`;
 }
 
+/** Deadlines need an absolute date; relative-past formatting treats future dates as "just now". */
+export function fmtDeadline(iso: string): string {
+  const date = parseTime(iso);
+  return Number.isNaN(date.getTime()) ? '' : date.toLocaleString('ru-RU', {
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+}
+
 export function plural(n: number, forms: [string, string, string]): string {
   const a = Math.abs(n) % 100;
   const b = a % 10;

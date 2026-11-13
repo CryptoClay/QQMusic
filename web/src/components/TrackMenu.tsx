@@ -8,6 +8,7 @@ import { canPlayAll } from '../lib/player';
 import { enc, navigate } from '../lib/router';
 import { attempt } from '../lib/ui';
 import { artistSeed, canWave, startWave, trackSeed } from '../lib/wave';
+import { CommunityPicker } from './CommunityPicker';
 import { Icon, type IconName } from './Icon';
 import { PlaylistPicker, type PlaylistPick } from './pickers';
 import { IconButton, Sheet, cx } from './ui';
@@ -74,6 +75,7 @@ async function addToPlaylist(track: MenuTrack, pick: PlaylistPick): Promise<bool
 
 /** `inPlayer`: opened from a player (the mini player, `/player` and its queue): a wave started here is the player's. */
 function TrackMenu({ track, extra, inPlayer, onClose }: { track: MenuTrack; extra?: MenuExtra[]; inPlayer?: boolean; onClose: () => void }) {
+  const [communityPicking,setCommunityPicking]=useState(false);
   const [picking, setPicking] = useState(false);
   const [busy, setBusy] = useState(false);
   const trackWave = trackSeed(track);
@@ -101,6 +103,8 @@ function TrackMenu({ track, extra, inPlayer, onClose }: { track: MenuTrack; extr
     });
   };
 
+  const communityRef=track.nd_song_id?`nd:${track.nd_song_id}`:track.ref;
+  if(communityPicking&&communityRef)return <CommunityPicker song={{ref:communityRef,title:track.title,artist:track.artist,duration_s:track.listen?.duration_s}} onClose={onClose}/>;
   if (picking)
     return (
       <PlaylistPicker
@@ -152,6 +156,9 @@ function TrackMenu({ track, extra, inPlayer, onClose }: { track: MenuTrack; extr
             onClick={() => setPicking(true)}
           />
         )}
+        {communityRef&&/^(nd|dz|hm|mb):/.test(communityRef)&&<MenuItem icon="playlist" label="В совместный плейлист" onClick={()=>setCommunityPicking(true)}/>}
+        {(track.nd_song_id||track.ref?.startsWith('dz:'))&&<MenuItem icon="external" label="Поделиться треком" onClick={()=>go(`/shares?track=${enc(communityRef!)}&title=${enc(track.title)}`)}/>}
+        <MenuItem icon="note" label="Попросить добавить музыку" onClick={()=>go(`/requests?artist=${enc(track.artist)}&title=${enc(track.title)}${track.ref&&/^(nd|dz|hm|mb):/.test(track.ref)?`&ref=${enc(track.ref)}`:''}`)}/>
         {extra?.map((x) => (
           <MenuItem
             key={x.label}

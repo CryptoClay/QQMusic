@@ -14,7 +14,7 @@ from datetime import date, datetime
 from pathlib import Path, PurePosixPath
 
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -165,8 +165,14 @@ def is_original(source_date: date | None, explicit: bool | None) -> bool:
     return bool(explicit) or (source_date is not None and source_date < cutoff)
 
 
+async def begin_library_write(s: AsyncSession) -> None:
+    """Acquire SQLite's writer before the filesystem lock, including multi-file transactions."""
+    await s.execute(update(Album).where(Album.id == -1).values(id=Album.id))
+
+
 async def import_file(s: AsyncSession, src: Path, spec: ImportSpec) -> Track:
     """Tag `src` (a file in staging/), move it into the library and create the Track row (caller commits)."""
+    await begin_library_write(s)
     async with library_lock:
         album = await get_or_create_album(s, spec)
         cover = tagger.prepare_cover(spec.cover) if spec.cover else None
@@ -207,6 +213,12 @@ async def import_file(s: AsyncSession, src: Path, spec: ImportSpec) -> Track:
             tagger.write_tags, src, tagdata_for(track, album, cover=cover, artists=spec.artists,
                                                 track_total=spec.track_total)
         )
+
+        from app.budgets import storage_budget
+        track.size_bytes = (await asyncio.to_thread(src.stat)).st_size
+        staging = get_settings().staging_dir
+        excluded = src.relative_to(staging).as_posix() if src.is_relative_to(staging) else None
+        await storage_budget(s, spec.added_by, track.size_bytes, excluded)
 
         ext = src.suffix.lstrip(".").lower() or "mp3"
         name = track_filename(spec.disc_no, spec.track_no, spec.title, ext)

@@ -28,7 +28,7 @@ from app.events import bus
 from app.jobs.downloads import enqueue_scan
 from app.jobs.queue import notify
 from app.library import editor
-from app.library.importer import album_reldir, library_abs, library_lock
+from app.library.importer import album_reldir, begin_library_write, library_abs, library_lock
 from app.models import Album, Track, User
 from app.security import decrypt, encrypt
 
@@ -266,6 +266,7 @@ async def apply(body: ApplyIn, user: User = Depends(admin_user),
             raise ValueError("expired")
     except (ValueError, RuntimeError, KeyError, TypeError) as exc:
         raise HTTPException(409, "Предпросмотр истёк. Проверьте изменения заново") from exc
+    await begin_library_write(s)
     async with library_lock:
         p = await plan(s, operation)
         if p["digest"] != data["digest"] or p["missing"]:

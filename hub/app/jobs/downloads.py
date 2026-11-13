@@ -125,12 +125,18 @@ async def update_item(item_id: int, **fields: Any) -> DownloadItem | None:
         if item.status in (*FAILED, "cancelled"):
             from app.favorites import download_failed
             await download_failed(s, item)
+        from app.community import reconcile_requests
+        await s.flush()
+        await reconcile_requests(s, item.batch_id)
         await s.flush()
         await s.refresh(item)
         if "status" in fields and item.status in TERMINAL:
             await mixes_done(s, [item])
         links = (await item_links(s, [item]))[item.id]
     bus.publish(item.user_id, "download", item_out(item, links=links).model_dump(mode="json"))
+    if "status" in fields:
+        from app.community import community_changed
+        community_changed(item.user_id)
     return item
 
 
@@ -852,6 +858,8 @@ async def create_items(
     start_position: int = 0,
     favorite_events: dict[str, str] | None = None,
 ) -> int:
+    from app.budgets import queue_budget
+    await queue_budget(s, batch.user_id, len(entries))
     for i, (q, meta, cand) in enumerate(entries):
         query_json: dict[str, Any] = {"query": q.model_dump(), "meta": meta}
         if star:

@@ -38,6 +38,9 @@ import { MorePage } from './pages/More';
 import { MusicSettingsPage, NotesPage, RecapPage, TrackDetailsPage } from './pages/Music';
 import { NextcloudPage } from './pages/Nextcloud';
 import { LibraryHealthPage } from './pages/LibraryHealth';
+import { CommunityPage, RequestsPage, InboxPage, CommunityPlaylistsPage, CommunityPlaylistPage, ResumePage, VersionsPage, LimitsPage, SharesPage } from './pages/Community';
+import { CommunitySync } from './lib/community';
+import { PublicSharePage } from './pages/PublicShare';
 import { SourcesPage } from './pages/Sources';
 import { PlayerPage } from './pages/Player';
 import { PlaylistsPage } from './pages/Playlists';
@@ -99,6 +102,15 @@ const ROUTES: RouteDef[] = [
   ['/nextcloud', 'library', () => <NextcloudPage />],
   ['/sources', 'more', () => <SourcesPage />],
   ['/library-health', 'more', () => <LibraryHealthPage />],
+  ['/community', 'more', () => <CommunityPage />],
+  ['/requests', 'more', (_,r) => <RequestsPage key={r.full} initial={{artist:r.query.get('artist')??'',title:r.query.get('title')??'',ref:r.query.get('ref')??'',kind:r.query.get('kind')==='album'?'album':'track'}}/>],
+  ['/inbox', 'more', () => <InboxPage />],
+  ['/community-playlists', 'library', () => <CommunityPlaylistsPage />],
+  ['/community-playlist/:id', 'library', p => <CommunityPlaylistPage key={p.id} id={Number(p.id)} />],
+  ['/resume', 'more', () => <ResumePage />],
+  ['/versions', 'library', () => <VersionsPage />],
+  ['/limits', 'more', () => <LimitsPage />],
+  ['/shares', 'more', (_,r) => <SharesPage key={r.full} collectionId={r.query.get('collection') ?? undefined} trackRef={r.query.get('track')??undefined} trackTitle={r.query.get('title')??undefined}/>],
   ['/admin', 'more', () => <AdminPage />],
   ['/admin/user/:id', 'more', (p) => <AdminUserPage key={p.id} id={Number(p.id)} />],
   ['/admin/insights', 'more', () => <InsightsOverviewPage />],
@@ -120,6 +132,12 @@ function resolve(route: Route): { tab: Tab | null; node: ReactNode } | null {
 }
 
 export function App() {
+  const route = useRoute();
+  const token = /^\/s\/([A-Za-z0-9_-]{32,100})$/.exec(route.path)?.[1];
+  return token ? <><PublicSharePage key={token} token={token}/><Overlays/></> : <PrivateApp/>;
+}
+
+function PrivateApp() {
   const [me, setMe] = useState<MeOut | null | undefined>(undefined);
   const [bootError, setBootError] = useState<string>();
   const route = useRoute();
@@ -229,6 +247,7 @@ export function App() {
   const wide = route.path.startsWith('/admin/');
   return (
     <SessionContext.Provider value={{ me, logout }}>
+      <CommunitySync/>
       {desktopShell ? (
         <DesktopShell me={me} active={resolved?.tab ?? null}>
           <main id="desktop-main" tabIndex={-1} className={cx('mx-auto min-h-dvh w-full px-4 pb-8', wide ? 'max-w-[1480px]' : 'max-w-[1280px]')}>{resolved?.node}<PlayerSpacer /></main>

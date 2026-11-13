@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app import listen
 from app.api.schemas import DownloadBatchOut, DownloadIn, DownloadItemOut, DownloadTrackIn, RetryIn
 from app.auth import current_user, user_navidrome
+from app.budgets import queue_budget
 from app.catalog.models import split_ref
 from app.db import get_session
 from app.events import bus
@@ -38,6 +39,9 @@ async def retry_batch(body: BatchRetryIn, user: User = Depends(current_user),
         raise HTTPException(404, 'Загрузка не найдена')
     running = select(Job.id).where(Job.kind == 'download_item', Job.status == 'running',
                                    func.json_extract(Job.payload_json, '$.item_id') == DownloadItem.id).exists()
+    retries = await s.scalar(select(func.count()).select_from(DownloadItem).where(DownloadItem.id.in_(ids),
+        DownloadItem.status.in_(("failed", "needs_review")), ~running))
+    await queue_budget(s, user.id, retries or 0)
     changed = (await s.execute(update(DownloadItem).where(DownloadItem.id.in_(ids),
         DownloadItem.status.in_(('failed', 'needs_review')), ~running)
         .values(status='queued', error=None, progress=0, chosen_candidate_json=None).returning(DownloadItem.id))).scalars().all()
@@ -314,6 +318,8 @@ async def retry(item_id: int, body: RetryIn, user: User = Depends(current_user),
         item.chosen_candidate_json = (await candidate_from_url(body.url, q)).model_dump(mode="json")
     else:
         item.chosen_candidate_json = None
+    if item.status not in ACTIVE_STATUSES:
+        await queue_budget(s, user.id, 1)
     item.status = "queued"
     item.error = None
     item.progress = 0
