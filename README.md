@@ -45,8 +45,8 @@ docker compose --profile gateway up -d --build
 
 ```powershell
 git pull --ff-only
-pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/Migrate-QQMusic.ps1         # только проверка
-pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/Migrate-QQMusic.ps1 -Apply  # сборка и переключение
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/Migrate-QQMusic.ps1         # только проверка
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/Migrate-QQMusic.ps1 -Apply  # сборка и переключение
 ```
 
 Скрипт сохраняет базы и старые контейнеры, записывает привязки томов в `.env` и сохраняет включённые дополнительные сервисы. Подробности и откат: [переименование](docs/renaming.md). Прежние названия в совместимых cookie, тегах, томах и Android-мосте оставлены намеренно.

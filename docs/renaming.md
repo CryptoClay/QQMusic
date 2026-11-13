@@ -16,8 +16,8 @@
 Сначала сделать [резервную копию](recovery.md). Не запускать старый и новый стек одновременно на одних базах.
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/Migrate-QQMusic.ps1
-pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/Migrate-QQMusic.ps1 -Apply
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/Migrate-QQMusic.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/Migrate-QQMusic.ps1 -Apply
 ```
 
 Без `-Apply` скрипт только проверяет Docker. С `-Apply` он определяет настоящие тома Hub/Navidrome и при наличии embedder; записывает `QQMUSIC_*_VOLUME` в `.env`. Копия прежнего `.env` остаётся в игнорируемой `.agent-work/`. Профили работающих embedder/туннеля сохраняются; прежний SSH-пользователь VPS подставляется, если другой не задан.

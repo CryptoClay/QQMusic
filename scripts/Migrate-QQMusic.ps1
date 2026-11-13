@@ -9,7 +9,9 @@ try {
     $ids = @(& docker ps -aq --filter 'label=com.docker.compose.project=homemusic')
     if ($LASTEXITCODE -ne 0) { throw 'Docker is unavailable.' }
     if (-not $ids.Count) { Write-Host 'No legacy stack found. Use docker compose up -d --build.'; return }
-    $legacy = @(& docker inspect @ids | ConvertFrom-Json)
+    # Windows PowerShell 5.1 returns a JSON array as one pipeline object.
+    # Assign it directly so service filtering sees containers, not a nested array.
+    $legacy = & docker inspect @ids | ConvertFrom-Json
     if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect the legacy stack.' }
     $newRunning = @(& docker ps -q --filter 'label=com.docker.compose.project=qqmusic')
     if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect QQMusic.' }

@@ -15,7 +15,7 @@ set LEGACY=0
 for /f %%n in ('docker ps -q --filter label^=com.docker.compose.project^=homemusic 2^>nul ^| find /c /v ""') do set LEGACY=%%n
 if not "%LEGACY%"=="0" (
   echo First migrate the running HomeMusic stack:
-  echo pwsh -NoProfile -ExecutionPolicy Bypass -File scripts\Migrate-QQMusic.ps1 -Apply
+  echo powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\Migrate-QQMusic.ps1 -Apply
   goto done
 )
 
