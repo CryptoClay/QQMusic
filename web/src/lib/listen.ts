@@ -1,3 +1,4 @@
+import { reorderQueue } from './playerActions';
 import { recoveryDelay, playbackError } from './playbackRecovery';
 import { clientStorage, tabStorage } from './storage';
 import { useSyncExternalStore } from 'react';
@@ -329,7 +330,7 @@ function el(): HTMLAudioElement {
     if (audio !== a) return;
     set({ position: pendingSeek || a.currentTime, duration: Number.isFinite(a.duration) && a.duration > 0 ? a.duration : state.duration });
     const seconds = Math.min(musicSettings().crossfade_s, a.duration * .1);
-    if (!fadingTail && effectsReady(a) && seconds > 0 && !a.paused && state.phase === 'playing' && state.repeat !== 'one' && hasNext(state) && a.duration > 20 && a.duration - a.currentTime <= seconds && a.duration - a.currentTime > .2) {
+    if (!stopAfterTrack && !fadingTail && effectsReady(a) && seconds > 0 && !a.paused && state.phase === 'playing' && state.repeat !== 'one' && hasNext(state) && a.duration > 20 && a.duration - a.currentTime <= seconds && a.duration - a.currentTime > .2) {
       fadingTail = a;
       audio = null;
       start(state.queue, state.index + 1, true, 0, true, true);
@@ -381,6 +382,7 @@ function el(): HTMLAudioElement {
   a.addEventListener('ended', () => {
     if (audio !== a) return;
     reportEnd(true);
+    if (stopAfterTrack) { stopAfterTrack=false;set({phase:'ended'});window.dispatchEvent(new Event('qqmusic:sleep-ended'));return; }
     if (state.repeat === 'one') start(state.queue, state.index, true);
     else if (hasNext(state)) start(state.queue, state.index + 1, true);
     else if (state.repeat === 'all' && !onWave()) start(state.queue, 0, true);
@@ -397,7 +399,14 @@ function el(): HTMLAudioElement {
   return a;
 }
 
+let stopAfterTrack=false;
+let playbackGate: (()=>boolean) | null=null;
+export function setStopAfterTrack(value:boolean){stopAfterTrack=value;}
+export function setPlaybackGate(gate:(()=>boolean)|null){playbackGate=gate;}
+export function playListening(){resume();}
+
 function play(a: HTMLAudioElement) {
+  if (playbackGate && !playbackGate()) return;
   resumeEffects();
   // NotAllowedError (no user gesture): wait for the play button; AbortError: a newer track or a pause won.
   a.play().catch((e: unknown) => {
@@ -900,12 +909,8 @@ export function removeFromQueue(index: number) {
 
 /** Moves a track of the queue to another place (the current one too). */
 export function moveInQueue(from: number, to: number) {
-  const q = [...state.queue];
-  if (from === to || from < 0 || to < 0 || from >= q.length || to >= q.length) return;
-  const current = q[state.index];
-  const [t] = q.splice(from, 1);
-  q.splice(to, 0, t);
-  set({ queue: q, index: q.indexOf(current) });
+  const result=reorderQueue(state.queue,state.index,from,to);
+  set({queue:result.queue,index:result.current});
   prefetchNext();
 }
 

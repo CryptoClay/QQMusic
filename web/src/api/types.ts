@@ -871,6 +871,7 @@ export interface BatchEvent {
 }
 
 export interface HubEventMap {
+  player: { device: string };
   community: { changed: boolean };
   download: DownloadItemOut;
   assistant: AssistantEvent;

@@ -1,3 +1,5 @@
+import { DeviceButton, SleepButton } from '../components/PlayerTools';
+import { openPlayerTool } from '../lib/playerTools';
 import { useEffect, useState } from 'react';
 import { Icon } from '../components/Icon';
 import { LikeButton } from '../components/LikeButton';
@@ -95,6 +97,9 @@ export function PlayerPage() {
           track={{ ...track, nd_song_id: info?.nd_song_id }}
           inPlayer
           extra={[
+            { icon: 'timer', label: 'Таймер сна', onClick: () => openPlayerTool('sleep') },
+            { icon: 'devices', label: 'Устройства и управление', onClick: () => openPlayerTool('devices') },
+            { icon: 'keyboard', label: 'Горячие клавиши', onClick: () => openPlayerTool('shortcuts') },
             {
               icon: 'x',
               label: 'Закрыть плеер',
@@ -180,14 +185,18 @@ export function PlayerPage() {
                   <VolumeControl />
                 </div>
               )}
-              <Link
-                to="/music-settings"
-                title="Музыка и звук"
-                aria-label="Музыка и звук"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full text-muted hover:bg-white/10 hover:text-fg"
-              >
-                <Icon name="sliders" size={19} />
-              </Link>
+              <div className="flex items-center gap-1">
+                <SleepButton />
+                <DeviceButton />
+                <Link
+                  to="/music-settings"
+                  title="Музыка и звук"
+                  aria-label="Музыка и звук"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full text-muted hover:bg-white/10 hover:text-fg"
+                >
+                  <Icon name="sliders" size={19} />
+                </Link>
+              </div>
             </div>
             {track.rec && (
               <div className="mt-3 flex items-center gap-1 rounded-xl bg-white/5 py-1 pl-3 pr-1">

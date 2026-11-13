@@ -1,3 +1,5 @@
+import { PlayerRuntime } from './lib/remotePlayer';
+import { PlayerToolSheets } from './components/PlayerTools';
 import { MetadataPage } from './pages/Metadata';
 import { NetworkStatus } from './components/NetworkStatus';
 import { WelcomePage, InstallPage, ServerPage } from './pages/Experience';
@@ -255,6 +257,8 @@ function PrivateApp() {
   return (
     <SessionContext.Provider value={{ me, logout }}>
       <CommunitySync/>
+      <PlayerRuntime />
+      <PlayerToolSheets />
       <NetworkStatus />
       {desktopShell ? (
         <DesktopShell me={me} active={resolved?.tab ?? null}>

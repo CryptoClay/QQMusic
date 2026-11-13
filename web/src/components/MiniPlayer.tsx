@@ -1,3 +1,5 @@
+import { DeviceButton } from './PlayerTools';
+import { openPlayerTool } from '../lib/playerTools';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { swipeTrack } from '../lib/playbackRecovery';
 import { providerLabel } from '../lib/format';
@@ -6,7 +8,6 @@ import { useDesktop } from '../lib/desktop';
 import { STANDALONE } from '../lib/embedded';
 import { Link, enc } from '../lib/router';
 import { LikeButton } from './LikeButton';
-import { Icon } from './Icon';
 import { usePreparation } from './Preparation';
 import { TrackMenuButton } from './TrackMenu';
 import { MusicTrack } from './MusicTrack';
@@ -140,6 +141,9 @@ export function MiniPlayer() {
       extra={[
         { icon: 'queue', label: 'Очередь воспроизведения', onClick: () => setPanel('queue') },
         { icon: 'lyrics', label: 'Текст песни', onClick: () => setPanel('lyrics') },
+        { icon: 'timer', label: 'Таймер сна', onClick: () => openPlayerTool('sleep') },
+        { icon: 'devices', label: 'Устройства и управление', onClick: () => openPlayerTool('devices') },
+        { icon: 'keyboard', label: 'Горячие клавиши', onClick: () => openPlayerTool('shortcuts') },
         { icon: 'x', label: 'Закрыть плеер', onClick: stopListening },
       ]}
       className="!h-9 !w-9 !text-muted"
@@ -201,14 +205,7 @@ export function MiniPlayer() {
                   size={19}
                 />
                 {menu}
-                <Link
-                  to="/player"
-                  title="Большой плеер"
-                  aria-label="Большой плеер"
-                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted hover:bg-white/10 hover:text-fg"
-                >
-                  <Icon name="expand" size={17} />
-                </Link>
+                <DeviceButton />
               </div>
             </>
           ) : (

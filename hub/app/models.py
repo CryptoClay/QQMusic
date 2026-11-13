@@ -717,6 +717,32 @@ class DownloadControl(Base):
     paused: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
+class PlaybackDevice(Base):
+    __tablename__ = 'playback_devices'
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
+    device: Mapped[str] = mapped_column(String(100), primary_key=True)
+    name: Mapped[str] = mapped_column(String(100))
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    state_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    seen_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class PlaybackCommand(Base):
+    __tablename__ = 'playback_commands'
+    __table_args__ = (UniqueConstraint('user_id', 'request_id', name='uq_playback_command_request'),
+                      Index('ix_playback_commands_target', 'user_id', 'device', 'status', 'id'))
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'))
+    device: Mapped[str] = mapped_column(String(100))
+    request_id: Mapped[str] = mapped_column(String(36))
+    action: Mapped[str] = mapped_column(String(20))
+    payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    status: Mapped[str] = mapped_column(String(20), default='pending')
+    result: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+
+
 class UserPolicy(Base):
     __tablename__ = "user_policies"
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
