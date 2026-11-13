@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { api, errorMessage, isAbort, peekCache, withQuery } from '../api/client';
+import { api, errorMessage, invalidateCache, isAbort, peekCache, withQuery } from '../api/client';
 import type { Candidate, LibTrackOut, ProviderSearchOut, SearchOut, SearchTracksOut, TrackOut } from '../api/types';
 import { ArtistBubble, ReleaseCard, TrackRow, listenTrack } from '../components/catalog';
 import { TrackMenuButton } from '../components/TrackMenu';
@@ -15,7 +15,10 @@ import { useAsync, useDebounced, useRememberScrollX, type AsyncState } from '../
 import { extendQueue, markQueued, useListen } from '../lib/listen';
 import { canPlay, canPlayAll, playList } from '../lib/player';
 import { Link, navigate } from '../lib/router';
+import { useDesktop } from '../lib/desktop';
+import { DesktopSearchHeader, DesktopSearchEmpty, DesktopSearchResults } from '../components/SearchDesktop';
 import { MixCard } from './Mix';
+import { SourceProblem } from '../components/SourceProblem';
 
 export type SearchTab = 'catalog' | 'files' | 'reuploads';
 
@@ -27,6 +30,7 @@ export function SearchPage({ initialQuery, initialTab }: { initialQuery: string;
   const dq = useDebounced(q.trim(), 400);
   const inputRef = useRef<HTMLInputElement>(null);
   const [historyError, setHistoryError] = useState<string>();
+  const desktop = useDesktop();
 
   // Keep the query in the URL so "back" from an artist/album restores the results.
   useEffect(() => {
@@ -56,7 +60,13 @@ export function SearchPage({ initialQuery, initialTab }: { initialQuery: string;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return (
+  return desktop ? (
+    <div>
+      <DesktopSearchHeader tab={tab} onTab={setTab} query={q} onQuery={setQ} inputRef={inputRef} />
+      {historyError && <div className="mx-auto max-w-[1180px] px-8 pb-3"><Notice>{historyError}</Notice></div>}
+      {!dq ? <><DesktopSearchEmpty onSearch={() => inputRef.current?.focus()} /><DesktopSearchResults><RecentSearches onPick={setQ} hideEmpty /></DesktopSearchResults></> : <DesktopSearchResults>{tab === 'catalog' ? <CatalogResults q={dq} /> : tab === 'files' ? <ProviderResults q={dq} /> : <ReuploadResults q={dq} />}</DesktopSearchResults>}
+    </div>
+  ) : (
     <div>
       <header className="pt-safe sticky top-0 z-20 bg-bg/95 px-4 pb-3 backdrop-blur">
         <h1 className="pb-3 pt-4 text-2xl font-bold">Поиск</h1>
@@ -119,7 +129,7 @@ export function SearchPage({ initialQuery, initialTab }: { initialQuery: string;
   );
 }
 
-function RecentSearches({ onPick }: { onPick: (q: string) => void }) {
+function RecentSearches({ onPick, hideEmpty = false }: { onPick: (q: string) => void; hideEmpty?: boolean }) {
   const res = useAsync((s) => api.searchHistory(s), []);
   const [expanded, setExpanded] = useState(false);
   const [clearing, setClearing] = useState(false);
@@ -157,6 +167,7 @@ function RecentSearches({ onPick }: { onPick: (q: string) => void }) {
   if (!res.data && res.loading) return <SkeletonRows n={3} />;
   if (res.error && !recent.length) return <ErrorState text={res.error} onRetry={() => res.reload()} />;
   if (!recent.length) {
+    if (hideEmpty) return null;
     return <Empty icon="search" title="Что будем слушать?" text="Ищите по каталогу Deezer и hitmoz, по своей библиотеке или по файлам в источниках." />;
   }
   return (
@@ -296,7 +307,7 @@ function CatalogResults({ q }: { q: string }) {
     <div className="pb-4">
       {data.errors.length > 0 && (
         <div className="px-4 pt-2">
-          <Notice>{data.errors.join('. ')}</Notice>
+          <SourceProblem detail={data.errors.join('\n')} onRetry={() => { invalidateCache('/api/search'); res.reload(); }} />
         </div>
       )}
       {empty && <Empty icon="search" title="Ничего не найдено" text="Попробуйте другое написание или поищите среди файлов в источниках." />}
@@ -409,7 +420,7 @@ function ReuploadResults({ q }: { q: string }) {
   return (
     <div className="pb-4">
       <p className="px-4 pt-1 text-xs text-muted">
-        Копии с маленьких каналов YouTube и SoundCloud: там выкладывают треки, которые после закона 2026 года отредактировали в официальных версиях. Перед скачиванием их можно послушать.
+        Перезаливы из YouTube и SoundCloud могут содержать разные версии. «Оригинал» означает ручное подтверждение конкретного файла; непроверенные записи помечены отдельно. Перед скачиванием их можно послушать.
       </p>
       <FileResults res={res} skeleton={4} empty={<Empty icon="search" title="Перезаливов не нашлось" />} />
     </div>
@@ -418,6 +429,7 @@ function ReuploadResults({ q }: { q: string }) {
 
 function FileResults({ res, skeleton, empty }: { res: AsyncState<ProviderSearchOut>; skeleton: number; empty: ReactNode }) {
   const [queued, setQueued] = useState<Record<string, 'busy' | 'done'>>({});
+  const [versionFilter,setVersionFilter] = useState('all');
 
   const download = async (c: Candidate) => {
     const key = `${c.provider}:${c.provider_id}`;
@@ -440,15 +452,17 @@ function FileResults({ res, skeleton, empty }: { res: AsyncState<ProviderSearchO
     <>
       {data.errors.length > 0 && (
         <div className="px-4 pt-2">
-          <Notice>{data.errors.join('. ')}</Notice>
+          <SourceProblem detail={data.errors.join('\n')} onRetry={() => { invalidateCache('/api/search'); res.reload(); }} />
         </div>
       )}
       {!data.candidates.length && empty}
+      {data.candidates.length>0 && <div className="px-4 py-3"><select className="input max-w-md" aria-label="Версия найденных файлов" value={versionFilter} onChange={(e)=>setVersionFilter(e.target.value)}><option value="all">Все версии</option><option value="original">Подтверждённые оригиналы</option><option value="unknown">Не подтверждены</option><option value="edited">Изменённые</option></select>{versionFilter!=='all' && !data.candidates.some((c)=>(data.versions?.[fileRef(c)]??'unknown')===versionFilter) && <p className="mt-3 text-sm text-muted">Версий с такой отметкой не найдено.</p>}</div>}
       <ul className="divide-y divide-line/60">
-        {data.candidates.map((c) => {
+        {data.candidates.filter((c)=>versionFilter==='all'||(data.versions?.[fileRef(c)]??'unknown')===versionFilter).map((c) => {
           const key = `${c.provider}:${c.provider_id}`;
           return (
             <li key={key}>
+              <p className="px-4 pt-2 text-xs text-muted">{({original:'Оригинал · подтверждено',edited:'Изменённая версия · подтверждено',unknown:'Версия не подтверждена'})[data.versions?.[fileRef(c)]??'unknown']}</p>
               <CandidateRow c={c} queue={data.candidates} action={<FileAction c={c} st={queued[key]} onDownload={() => download(c)} />} />
             </li>
           );

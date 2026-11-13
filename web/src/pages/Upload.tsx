@@ -212,6 +212,7 @@ export function UploadPage() {
   return (
     <div className="pb-28">
       <PageHeader title="Загрузить файлы" back="/more" />
+      <p className="px-4 pb-4 text-sm text-muted">После импорта музыка попадёт в общую библиотеку и будет доступна другим пользователям сервиса. Личное облако подключается отдельно через Nextcloud.</p>
 
       <div className="px-4">
         <input

@@ -1,7 +1,7 @@
 /** Inside the HomeMusic Android app (WebView): the app has its own navigation, so the PWA tab bar is not drawn.
  * The app opens `/?embedded=1#/route` and adds `HomeMusicAndroid/<version>` to the User-Agent. */
 export const EMBEDDED =
-  new URLSearchParams(window.location.search).has('embedded') ||
+  ['1', 'true'].includes(new URLSearchParams(window.location.search).get('embedded') ?? '') ||
   'HomeMusicAndroid' in window ||
   navigator.userAgent.includes('HomeMusicAndroid/');
 

@@ -6,6 +6,7 @@ import { getListenState, listenAll, replaceUpcoming, type ListenTrack } from './
 import { canPlayAll, canPlayWave, playWave } from './player';
 import { onPlayEvent } from './plays';
 import { toastError } from './ui';
+import { musicSettings, type RadioMode } from './music';
 
 /** «Моя волна» (MIXES.md 7): an endless stream the Hub picks for the user, 5 tracks at a time
  * (`POST /api/wave/start`, then `POST /api/wave/{id}/next`).
@@ -139,12 +140,12 @@ function remember(s: Session, w: WaveOut) {
 
 /** Starts the user's own wave, or one from a track or an artist («Волна по треку»). `origin` — where it was started
  * (INSIGHTS.md 6.3: analytics only, the Hub keeps it with the session). */
-export async function startWave(seed: WaveSeedIn | null | undefined, origin: WaveOrigin): Promise<boolean> {
+export async function startWave(seed: WaveSeedIn | null | undefined, origin: WaveOrigin, mode: RadioMode = musicSettings().radio_mode): Promise<boolean> {
   if (starting !== null) return false;
   starting = seedKey(seed);
   emit();
   try {
-    const w = await api.waveStart({ seed: seed ?? null, origin, client: EMBEDDED ? 'pwa-app' : 'pwa' });
+    const w = await api.waveStart({ seed: seed ?? null, mode, origin, client: EMBEDDED ? 'pwa-app' : 'pwa' });
     if (!w.tracks.length) {
       toastError('Волна пока пустая: попробуйте чуть позже');
       return false;

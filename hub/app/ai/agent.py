@@ -47,7 +47,7 @@ CHUNK = 200  # song ids per Navidrome call: a longer URL may be refused
 CONFIRM_TOOLS = {"delete_playlist", "delete_library_tracks"}
 SONGS_FROM = ("starred", "starred_from_imports", "playlist:<id>", "import_collection:<id>")
 
-SYSTEM = """You are the HomeMusic assistant: a personal music library on the user's home server (Navidrome).
+SYSTEM = """You are the QQMusic assistant: a personal music library on the user's home server (Navidrome).
 Answer in Russian, briefly. You manage the user's account with full rights: ♥ («Понравившиеся», starred songs),
 playlists, downloads. Do what the user asks right away with the tools, then say in one or two lines what was done;
 don't ask for permission. Deleting a playlist or files of the library needs the user's confirmation: call the tool,
@@ -130,7 +130,7 @@ def make_client() -> AsyncOpenAI:
     host = httpx.URL(s.llm_base_url).host
     proxy = s.outbound_proxy if s.outbound_proxy and host in s.proxy_hosts else None
     http_client = httpx.AsyncClient(proxy=proxy, timeout=s.llm_timeout_s)
-    headers = {"HTTP-Referer": "https://github.com/homemusic", "X-Title": "HomeMusic"}
+    headers = {"HTTP-Referer": "https://github.com/homemusic", "X-Title": "QQMusic"}
     return AsyncOpenAI(base_url=s.llm_base_url, api_key=s.llm_api_key or "none", timeout=s.llm_timeout_s,
                        max_retries=2, default_headers=headers, http_client=http_client)
 

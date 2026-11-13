@@ -3,7 +3,6 @@ import { Button, Empty, PageHeader, Spinner } from '../components/ui';
 import { navigate } from '../lib/router';
 import { clearShare, readShare } from '../lib/shareStore';
 import { toast } from '../lib/ui';
-import { startChatWith } from './AssistantChat';
 import { isAudioFile, queueFilesForUpload } from './Upload';
 
 type Phase = { kind: 'working'; text: string } | { kind: 'empty' } | { kind: 'error'; text: string };
@@ -12,7 +11,7 @@ type Phase = { kind: 'working'; text: string } | { kind: 'empty' } | { kind: 'er
 let running: Promise<void> | null = null;
 
 /**
- * Android "Share" → HomeMusic. The service worker stored the shared payload in IndexedDB and redirected here:
+ * Android "Share" → QQMusic. The service worker stored the shared payload in IndexedDB and redirected here:
  * images, text / link → a new assistant chat with them ready to send, audio → upload form.
  */
 export function SharePage() {
@@ -33,24 +32,14 @@ export function SharePage() {
       }
       await clearShare().catch(() => undefined);
 
-      const images = payload.files.filter((f) => f.type.startsWith('image/'));
-      const audio = payload.files.filter((f) => !f.type.startsWith('image/') && isAudioFile(f));
-      const text = [payload.title, payload.text, payload.url].map((s) => (s ?? '').trim()).filter(Boolean).join(' ');
-
+      const audio = payload.files.filter(isAudioFile);
       if (audio.length) {
         queueFilesForUpload(audio);
-        if (images.length) toast('Скриншоты — в чате ассистента', 'info', { label: 'Открыть', to: '/assistant' });
-      }
-      if (images.length || (text && !audio.length)) {
-        startChatWith(images.length ? text || 'Найди и скачай треки с этих скриншотов' : text, images);
-        if (audio.length) navigate('/upload', { replace: true });
-        return;
-      }
-      if (audio.length) {
+        if (audio.length !== payload.files.length) toast('Загружены только аудиофайлы', 'info');
         navigate('/upload', { replace: true });
         return;
       }
-      setPhase({ kind: 'error', text: 'Этот тип файлов не поддерживается. Поделитесь скриншотом, аудиофайлом или ссылкой.' });
+      setPhase({ kind: 'error', text: 'Поддерживаются только аудиофайлы. Скриншоты и текст больше не обрабатываются.' });
     })().finally(() => {
       running = null;
     });
@@ -65,15 +54,15 @@ export function SharePage() {
           <p className="text-muted">{phase.text}</p>
         </div>
       ) : phase.kind === 'empty' ? (
-        <Empty icon="sparkle" title="Нечего обрабатывать" text="Поделитесь скриншотом, аудиофайлом или ссылкой из другого приложения и выберите HomeMusic.">
-          <Button small onClick={() => navigate('/assistant', { replace: true })}>
-            К ассистенту
+        <Empty icon="note" title="Нечего обрабатывать" text="Поделитесь аудиофайлом из другого приложения и выберите QQMusic.">
+          <Button small onClick={() => navigate('/upload', { replace: true })}>
+            Загрузить файлы
           </Button>
         </Empty>
       ) : (
         <Empty icon="alert" title="Не получилось" text={phase.text}>
-          <Button small onClick={() => navigate('/assistant', { replace: true })}>
-            К ассистенту
+          <Button small onClick={() => navigate('/upload', { replace: true })}>
+            Загрузить файлы
           </Button>
         </Empty>
       )}

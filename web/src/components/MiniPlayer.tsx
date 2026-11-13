@@ -1,11 +1,13 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { fmtDuration, providerLabel } from '../lib/format';
 import { downloadRef, hasNext, hasPrev, next, prev, seek, setVolume, stopListening, toggle, useListen } from '../lib/listen';
+import { useDesktop } from '../lib/desktop';
 import { STANDALONE } from '../lib/embedded';
 import { addRec, hideRec } from '../lib/smartShuffle';
 import { Link, enc } from '../lib/router';
 import { Icon } from './Icon';
 import { LikeButton } from './LikeButton';
+import { usePreparation } from './Preparation';
 import { TrackMenuButton } from './TrackMenu';
 import { Cover, IconButton, Spinner, cx } from './ui';
 
@@ -29,7 +31,10 @@ export function MiniPlayer() {
   const [busy, setBusy] = useState(false);
   const [scrub, setScrub] = useState<number | null>(null);
   const box = useRef<HTMLDivElement>(null);
+  const desktop = useDesktop();
   const shown = !!track;
+  const preparing = usePreparation(track?.ref, phase === 'resolving' || phase === 'loading');
+
 
   useLayoutEffect(() => {
     const el = box.current;
@@ -53,7 +58,7 @@ export function MiniPlayer() {
   const status =
     phase === 'error'
       ? error
-      : phase === 'resolving' && !info
+      : preparing ? preparing : phase === 'resolving' && !info
         ? 'Ищу файл…'
         : waiting
           ? 'Загрузка…'
@@ -81,7 +86,6 @@ export function MiniPlayer() {
           <div className={cx('text-[13px] leading-tight', phase === 'error' ? 'line-clamp-2 text-danger' : 'truncate text-muted')}>{status}</div>
         ) : (
           <div className="flex items-center gap-1.5 text-[13px] leading-tight text-muted">
-            {/* the preview is all there is: no source has the full track */}
             {onWave && (
               <span title="Моя волна" className="shrink-0 text-accent">
                 <Icon name="wave" size={14} />
@@ -101,8 +105,8 @@ export function MiniPlayer() {
   );
 
   return (
-    <div ref={box} className="fixed inset-x-0 bottom-[calc(var(--tabbar-h)+env(safe-area-inset-bottom))] z-40 mx-auto max-w-2xl px-2 pb-2" role="region" aria-label="Прослушивание">
-      <div className="anim-up overflow-hidden rounded-xl border border-line bg-raised/95 shadow-2xl backdrop-blur">
+    <div ref={box} className={desktop ? 'fixed bottom-0 left-[238px] right-0 z-40 px-4 pb-3' : 'fixed inset-x-0 bottom-[calc(var(--tabbar-h)+env(safe-area-inset-bottom))] z-40 mx-auto max-w-2xl px-2 pb-2'} role="region" aria-label="Прослушивание">
+      <div className={desktop ? 'anim-up mx-auto max-w-[1152px] overflow-hidden rounded-2xl border border-[#3b3938] bg-[#202022]/[.98] shadow-2xl backdrop-blur' : 'anim-up overflow-hidden rounded-xl border border-line bg-raised/95 shadow-2xl backdrop-blur'}>
         <div className="flex items-center gap-2 py-1.5 pl-2 pr-1">
           {STANDALONE ? (
             <Link to="/player" className="flex min-w-0 flex-1 items-center gap-3" title="Открыть плеер">

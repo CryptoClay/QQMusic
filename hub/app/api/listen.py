@@ -5,7 +5,8 @@ from __future__ import annotations
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
 from app import listen
@@ -16,17 +17,44 @@ from app.models import User
 router = APIRouter(prefix="/api/listen", tags=["listen"])
 
 
-async def _choose(ref: str) -> listen.Choice:
+class PrepareIn(BaseModel):
+    refs: list[str] = Field(default_factory=list, max_length=2)
+
+
+@router.get("/status")
+async def preparation_status(ref: str, user: User = Depends(current_user)):
+    from app.preparation import status
+    return JSONResponse(status(ref), headers={'Cache-Control': 'no-store'})
+
+
+@router.post("/prepare")
+async def prepare(body: PrepareIn, user: User = Depends(current_user)):
+    from app.preparation import prepare
+    return {"queued": prepare(user.id, body.refs)}
+
+
+async def _choose(ref: str, *, full_only: bool = False, user: User | None = None, background: bool = False) -> listen.Choice:
     try:
-        return await listen.choose(ref)
+        from app.api.music import preferred_ref
+        seen = set()
+        for _ in range(4):
+            if ref in seen:
+                raise HTTPException(409, 'Проверьте ссылки подтверждённых версий: обнаружен цикл')
+            seen.add(ref)
+            choice = await listen.choose(ref, full_only=full_only, background=background)
+            target = await preferred_ref(user, choice) if user else ref
+            if target == ref:
+                return choice
+            ref = target
+        raise HTTPException(409, 'Слишком много переходов между версиями трека')
     except listen.ListenError as e:
         raise HTTPException(e.status, str(e)) from e
 
 
 @router.get("", response_model=ListenOut)
-async def resolve(ref: str, user: User = Depends(current_user)):
-    """Picks the file (may take a while: providers are searched), then the client plays `stream_url`."""
-    c = await _choose(ref)
+async def resolve(ref: str, full: bool = False, user: User = Depends(current_user)):
+    """Picks the file; full=1 excludes preview and carries that requirement into stream_url."""
+    c = await _choose(ref, full_only=full, user=user)
     cand = c.candidate
     return ListenOut(
         ref=c.ref,
@@ -38,7 +66,7 @@ async def resolve(ref: str, user: User = Depends(current_user)):
         bitrate_kbps=cand.bitrate_kbps if cand else None,
         page_url=cand.page_url if cand else None,
         nd_song_id=c.nd_song_id,
-        stream_url=f"/api/listen/stream?ref={quote(c.ref, safe='')}",
+        stream_url=f"/api/listen/stream?ref={quote(c.ref, safe='')}{'&full=1' if full else ''}",
     )
 
 
@@ -47,6 +75,23 @@ async def prefetch(body: ListenPrefetchIn, user: User = Depends(current_user)):
     """The tracks on the user's screen, top first: the Hub picks their files in the background (replaces the
     previous list)."""
     return ListenPrefetchOut(queued=listen.prefetch(user.id, body.refs))
+
+
+@router.get("/preview")
+async def preview(ref: str, request: Request, user: User = Depends(current_user)):
+    """Proxy the catalog preview only; does not resolve or record a full-track listen."""
+    try:
+        choice = await listen.choose_preview(ref)
+        response, source = await listen.open_stream(choice, request.headers.get("range"))
+        media = listen._upstream_media(choice, response, source)
+    except listen.ListenError as e:
+        raise HTTPException(e.status, str(e)) from e
+    headers = {**media.headers, "accept-ranges": "bytes", "cache-control": "no-store",
+               "X-HomeMusic-Listen-Kind": "preview"}
+    if media.body is None:
+        return Response(status_code=media.status, headers=headers)
+    return StreamingResponse(media.body, status_code=media.status, headers=headers, media_type=media.media_type,
+                             background=BackgroundTask(media.close) if media.close else None)
 
 
 @router.get("/stream")
@@ -60,7 +105,8 @@ async def stream(ref: str, request: Request, q: str | None = None, full: bool = 
     # `start` event is (app/api/plays.py), and its server copy waits for those of played tracks
     ahead = request.headers.get("x-homemusic-prefetch") == "1"
     try:
-        m = await listen.open_media(ref, rng or None, ahead=ahead, quality=q, full_only=full)
+        selected = await _choose(ref, full_only=full, user=user, background=ahead)
+        m = await listen.open_media(selected.ref, rng or None, ahead=ahead, quality=q, full_only=full)
     except listen.ListenError as e:
         raise HTTPException(e.status, str(e)) from e
     if m.choice.kind == "full" and not ahead and (not rng or rng.startswith("bytes=0-")):

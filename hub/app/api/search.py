@@ -17,13 +17,13 @@ from app.api.schemas import ProviderSearchOut, SearchHistoryIn, SearchHistoryOut
 from app.auth import current_user
 from app.catalog.models import CatalogTrack, SearchResults
 from app.config import get_settings
-from app.db import get_session
+from app.db import get_session, session_scope
 from app.events import bus
 from app.library.owned import annotate_albums, annotate_tracks
 from app.matching.normalize import has_cyrillic, normalize_title
 from app.matching.select import rank_candidates
-from app.models import SearchHistory, Track, User, utcnow
-from app.providers.base import TrackQuery
+from app.models import MusicEditorial, SearchHistory, Track, User, utcnow
+from app.providers.base import TrackQuery, file_ref
 from app.services import svc
 
 log = logging.getLogger(__name__)
@@ -185,4 +185,9 @@ async def search_providers(q: str = Query(min_length=1), provider: str | None = 
     for lst in await asyncio.gather(*(one(n) for n in names)):
         out.candidates.extend(lst)
     await listen.remember_files(out.candidates)
+    keys = ['version:' + file_ref(c.provider, c.provider_id) for c in out.candidates]
+    if keys:
+        async with session_scope() as session:
+            rows = (await session.execute(select(MusicEditorial).where(MusicEditorial.key.in_(keys)))).scalars()
+            out.versions = {row.key.removeprefix('version:'): row.data_json.get('status', 'unknown') for row in rows}
     return out

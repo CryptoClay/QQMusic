@@ -41,7 +41,7 @@ async def device_start(device_id: str) -> dict[str, Any]:
     try:
         async with make_client(http2=False) as c:
             r = await c.post(f"{OAUTH}/device/code",
-                             data={"client_id": CLIENT_ID, "device_id": device_id, "device_name": "HomeMusic"})
+                             data={"client_id": CLIENT_ID, "device_id": device_id, "device_name": "QQMusic"})
     except Exception as e:
         raise SourceError(f"Яндекс не ответил: {e}") from e
     if r.status_code != 200 or "device_code" not in r.text:

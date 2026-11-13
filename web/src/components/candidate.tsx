@@ -30,17 +30,11 @@ export function listenFiles(list: readonly Candidate[], c: Candidate) {
   else listen(tracks[i], tracks);
 }
 
-/** Uploads before this date predate the law of 2026-03-01 that got tracks edited (PLAN 3.2). */
-const CENSORSHIP_LAW = '2026-03-01';
-
-/** What a file says about censorship: its re-uploader's word, else its upload date (as the Hub's
- * `trusted_original`: an official YouTube Music copy doesn't count by date, labels replace its audio in place). */
+/** Source claims are kept separate from an administrator's confirmation of this exact file. */
 function censorship(c: Candidate): { text: string; tone: 'good' | 'bad' } | null {
   const marker = c.extra?.uncensored;
-  if (marker === true) return { text: 'без цензуры', tone: 'good' };
-  if (marker === false) return { text: 'с цензурой', tone: 'bad' };
-  const old = c.upload_date && c.upload_date < CENSORSHIP_LAW;
-  if (old && c.explicit !== false && c.extra?.source !== 'ytmusic') return { text: 'до 01.03.2026', tone: 'good' };
+  if (marker === true) return { text: 'источник заявляет: без цензуры', tone: 'good' };
+  if (marker === false) return { text: 'источник заявляет: изменённая версия', tone: 'bad' };
   return null;
 }
 

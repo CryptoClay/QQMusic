@@ -404,9 +404,15 @@ async def search_provider(p, q: TrackQuery, item_id: int, *, limit: int = 15,
     n_enrich = cfg.enrich_top_n if enrich_top_n is None else enrich_top_n
     try:
         raw = await p.search(q, limit=limit)
+        from app.source_status import record
+        record(p.name, 'search', True)
     except ProviderError as e:
+        from app.source_status import record
+        record(p.name, 'search', False, str(e))
         return [], f"{p.name}: {e}"
     except Exception as e:
+        from app.source_status import record
+        record(p.name, 'search', False, str(e))
         log.warning("provider %s search failed: %r", p.name, e, extra={"item_id": item_id})
         return [], f"{p.name}: {e!r}"
     ranked = rank_candidates(q, [c for c in raw if uploaded_in_time(c, cutoffs)], cfg)
@@ -437,6 +443,19 @@ async def try_candidates(item_id: int, user_id: int, q: TrackQuery, meta: dict[s
     to the imported track's warnings."""
     pcfg = get_settings().cfg
     last_reason = ""
+    from app.models import MusicEditorial, MusicPreferences
+    from app.providers.base import file_ref
+
+    async with session_scope() as s:
+        preferences = await s.get(MusicPreferences, user_id)
+        if preferences and preferences.data_json.get('prefer_original'):
+            keys = ['version:'+file_ref(c.provider, c.provider_id) for c in cands]
+            versions = {row.key.removeprefix('version:'):row.data_json.get('status') for row in (
+                await s.execute(select(MusicEditorial).where(MusicEditorial.key.in_(keys)))).scalars()}
+            cands = [c for c in cands if versions.get(file_ref(c.provider, c.provider_id)) != 'edited']
+            cands.sort(key=lambda c: versions.get(file_ref(c.provider, c.provider_id)) != 'original')
+            if not cands:
+                return False, 'Найдены только подтверждённые изменённые версии. Вы предпочитаете оригиналы'
     for cand in cands:
         provider = svc.providers.get(cand.provider)
         if provider is None:
@@ -459,6 +478,8 @@ async def try_candidates(item_id: int, user_id: int, q: TrackQuery, meta: dict[s
         except Exception as e:
             last_reason = f"{cand.provider}: {e}"
             log.warning("fetch failed %s: %r", cand.page_url, e, extra={"item_id": item_id})
+            from app.source_status import record
+            record(cand.provider, 'audio', False, str(e))
             continue
         check = await probe.postcheck(path, q.duration_s or cand.duration_s, pcfg.matching.duration_tolerance_s,
                                       pcfg.postcheck.silence_warn_s)
@@ -466,6 +487,8 @@ async def try_candidates(item_id: int, user_id: int, q: TrackQuery, meta: dict[s
             last_reason = f"{cand.provider}: {check.reason}"
             path.unlink(missing_ok=True)
             continue
+        from app.source_status import record
+        record(cand.provider, 'audio', True)
         await import_downloaded(item_id, user_id, q, meta, cand, path, check, force, warning=warning)
         return True, ""
     return False, last_reason
@@ -675,8 +698,8 @@ async def star_liked(s: AsyncSession, items: list[DownloadItem]) -> None:
     off_by_user: dict[int, list[str]] = {}
     for i in liked:
         if nd_id := songs.get(i.track_id):
-            from app.favorites import record, remember, snapshot
             from app.api.schemas import FavoriteTarget
+            from app.favorites import record, remember, snapshot
             from app.models import PlayEvent
 
             i = await s.get(DownloadItem, i.id, populate_existing=True)
@@ -694,7 +717,7 @@ async def star_liked(s: AsyncSession, items: list[DownloadItem]) -> None:
             await remember(s, target, extra_aliases=extra)
             states = await snapshot(s, i.user_id)
             state = next((x for x in states.values() if x.target_type == "track" and
-                          (x.nd_id == nd_id or ref and x.ref == ref)), None)
+                          (x.nd_id == nd_id or (ref and x.ref == ref))), None)
             if state and not state.liked:
                 # A terminal failure rolls back the promise, but a successful manual retry may restore it.
                 if original is None or state.event.event_id != original.event_id:

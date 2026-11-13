@@ -98,6 +98,10 @@ export function providerLabel(p?: string | null): string {
       return 'YouTube · перезалив';
     case 'soundcloud':
       return 'SoundCloud';
+    case 'internet_archive':
+      return 'Internet Archive';
+    case 'nextcloud':
+      return 'Nextcloud';
     case 'slskd':
       return 'Soulseek';
     case 'upload':

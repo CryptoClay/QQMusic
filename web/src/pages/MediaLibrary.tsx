@@ -4,6 +4,7 @@ import type { NdAlbumOut, NdArtistOut, NdSongOut } from '../api/types';
 import { playAll, TrackRow } from '../components/catalog';
 import { Icon } from '../components/Icon';
 import { LikeButton } from '../components/LikeButton';
+import { MusicProfile } from '../components/MusicProfile';
 import { Button, Cover, Empty, ErrorState, IconButton, PageHeader, SectionTitle, SkeletonRows, Spinner, cx } from '../components/ui';
 import { fmtLength, tracksWord } from '../lib/format';
 import { useHubEvent } from '../lib/events';
@@ -272,6 +273,7 @@ const albumsWord = (n: number) => {
 };
 
 export function NdArtistPage({ id }: { id: string }) {
+  const [customCover,setCustomCover] = useState('');
   const res = useAsync((s) => api.ndArtist(id, s), [id]);
   const { starting } = useWave();
   if (res.loading) return (<><PageHeader title="Исполнитель" back="/artists" /><SkeletonRows /></>);
@@ -285,7 +287,7 @@ export function NdArtistPage({ id }: { id: string }) {
         right={<LikeButton targetType="artist" ndId={artist.id} title={artist.name} data={{ name: artist.name }} />}
       />
       <Hero
-        cover={artist.cover_url ?? albums[0]?.cover_url}
+        cover={customCover || artist.cover_url || albums[0]?.cover_url}
         round
         title={artist.name}
         sub={albumsWord(albums.length)}
@@ -302,6 +304,7 @@ export function NdArtistPage({ id }: { id: string }) {
           )
         }
       />
+      <MusicProfile kind="artist" refId={`nd:${id}`} onCover={setCustomCover}/>
       <div className="grid grid-cols-2 gap-4 px-4 pb-4 sm:grid-cols-3">
         {albums.map((a) => (
           <NdAlbumCard key={a.id} album={a} showArtist={false} />
@@ -312,6 +315,7 @@ export function NdArtistPage({ id }: { id: string }) {
 }
 
 export function NdAlbumPage({ id }: { id: string }) {
+  const [customCover,setCustomCover] = useState('');
   const res = useAsync((s) => api.ndAlbum(id, s), [id]);
   if (res.loading) return (<><PageHeader title="Альбом" back="/library" /><SkeletonRows /></>);
   if (!res.data) return (<><PageHeader title="Альбом" back="/library" /><ErrorState text={res.error ?? 'Альбом не найден'} onRetry={() => res.reload()} /></>);
@@ -326,7 +330,7 @@ export function NdAlbumPage({ id }: { id: string }) {
         right={<LikeButton targetType="album" ndId={a.id} title={a.title} data={{ name: a.title, artist: a.artist }} />}
       />
       <Hero
-        cover={a.cover_url?.replace(/size=\d+/, 'size=600')}
+        cover={customCover || a.cover_url?.replace(/size=\d+/, 'size=600')}
         title={a.title}
         sub={
           <>
@@ -343,7 +347,8 @@ export function NdAlbumPage({ id }: { id: string }) {
       />
       <ListActions tracks={tracks} context="album" />
       <ul>
-        {tracks.map((t, i) => (
+      <MusicProfile kind="album" refId={`nd:${id}`} onCover={setCustomCover}/>
+      {tracks.map((t, i) => (
           <li key={`${t.nd_song_id}:${i}`}>
             <TrackRow track={t} number={t.track_no ?? i + 1} queue={tracks} link={false} />
           </li>

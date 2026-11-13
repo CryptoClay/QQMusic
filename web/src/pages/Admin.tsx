@@ -3,7 +3,7 @@ import { api } from '../api/client';
 import type { AdminUserOut, InviteOut } from '../api/types';
 import { Icon } from '../components/Icon';
 import { Button, Empty, ErrorState, Field, IconButton, PageHeader, SectionTitle, Segmented, Sheet, SkeletonRows, cx } from '../components/ui';
-import { fmtDate, fmtUsd, fmtWhen, parseTime, plural } from '../lib/format';
+import { fmtDate, fmtWhen, parseTime, plural } from '../lib/format';
 import { useAsync } from '../lib/hooks';
 import { Link } from '../lib/router';
 import { useSession } from '../lib/session';
@@ -52,8 +52,8 @@ export function AdminPage() {
 
       {d && (
         <div className="grid grid-cols-3 gap-2 px-4 pb-2">
-          <Tile label="ИИ за 30 дней" value={fmtUsd(d.ai_cost_30d_usd)} />
-          <Tile label="ИИ всего" value={fmtUsd(d.ai_cost_usd)} />
+          <Tile label="Пользователей" value={String(d.users.length)} />
+          <Tile label="Активных приглашений" value={String(active.length)} />
           <Tile label="Песен всего" value={String(d.library_tracks)} />
         </div>
       )}
@@ -198,7 +198,7 @@ function UserCard({ u }: { u: AdminUserOut }) {
       </div>
       {u.in_hub && (
         <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-          <Stat value={fmtUsd(u.ai_cost_usd)} label={`ИИ · ${u.ai_requests} ${plural(u.ai_requests, ['запрос', 'запроса', 'запросов'])}`} />
+          <Stat value={String(u.tracks_added)} label="добавлено в библиотеку" />
           <Stat value={String(u.downloads_done)} label={plural(u.downloads_done, ['песня скачана', 'песни скачано', 'песен скачано'])} />
           <Stat value={u.starred_songs == null ? '—' : String(u.starred_songs)} label="♥ понравилось" />
         </div>
@@ -262,7 +262,7 @@ function CreateInviteSheet({ open, onClose, onCreated }: { open: boolean; onClos
 function inviteMessage(inv: InviteOut, hubUrl: string): string {
   const apk = `${hubUrl.replace(/\/$/, '')}/app/latest.apk`;
   return [
-    `Приглашение в HomeMusic${inv.note ? ` для: ${inv.note}` : ''}.`,
+    `Приглашение в QQMusic${inv.note ? ` для: ${inv.note}` : ''}.`,
     `1. Установите приложение: ${apk}`,
     '2. На экране входа нажмите «Далее», затем «Регистрация по коду».',
     `3. Введите код ${inv.code} и придумайте имя и пароль.`,

@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +23,48 @@ from app.providers.base import Candidate, TrackQuery
 from app.services import svc
 
 router = APIRouter(prefix="/api/downloads", tags=["downloads"])
+
+
+class BatchRetryIn(BaseModel):
+    ids: list[int] = Field(min_length=1, max_length=100)
+
+
+@router.post('/retry-batch')
+async def retry_batch(body: BatchRetryIn, user: User = Depends(current_user),
+                      s: AsyncSession = Depends(get_session, scope='function')):
+    ids = list(dict.fromkeys(body.ids))
+    owned = (await s.execute(select(DownloadItem.id).where(DownloadItem.id.in_(ids), DownloadItem.user_id == user.id))).scalars().all()
+    if len(owned) != len(ids):
+        raise HTTPException(404, 'Загрузка не найдена')
+    running = select(Job.id).where(Job.kind == 'download_item', Job.status == 'running',
+                                   func.json_extract(Job.payload_json, '$.item_id') == DownloadItem.id).exists()
+    changed = (await s.execute(update(DownloadItem).where(DownloadItem.id.in_(ids),
+        DownloadItem.status.in_(('failed', 'needs_review')), ~running)
+        .values(status='queued', error=None, progress=0, chosen_candidate_json=None).returning(DownloadItem.id))).scalars().all()
+    for item_id in changed:
+        await s.execute(update(Job).where(Job.kind == 'download_item', Job.status == 'queued',
+            func.json_extract(Job.payload_json, '$.item_id') == item_id).values(status='done'))
+        await enqueue(s, 'download_item', {'item_id': item_id})
+    await s.commit()
+    changed_items = (await s.execute(select(DownloadItem).where(DownloadItem.id.in_(changed)))).scalars().all()
+    links = await item_links(s, changed_items)
+    for item in changed_items:
+        bus.publish(user.id, 'download', item_out(item, links=links[item.id]).model_dump(mode='json'))
+    notify()
+    return {'queued': len(changed), 'skipped': len(ids) - len(changed)}
+
+
+@router.post('/items/{item_id}/priority')
+async def prioritize(item_id: int, user: User = Depends(current_user),
+                     s: AsyncSession = Depends(get_session, scope='function')):
+    item = await _own_item(s, user, item_id)
+    if item.status != 'queued':
+        raise HTTPException(409, 'Приоритет можно повысить только для ожидающей загрузки')
+    result = await s.execute(update(Job).where(Job.kind == 'download_item', Job.status == 'queued',
+        func.json_extract(Job.payload_json, '$.item_id') == item_id).values(priority=100))
+    await s.commit()
+    notify()
+    return {'updated': result.rowcount}
 
 
 async def resolve_playlist(user: User, playlist_id: str | None, new_name: str | None) -> str | None:

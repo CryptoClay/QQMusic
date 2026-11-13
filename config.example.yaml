@@ -11,7 +11,7 @@ sources:
   uploaded_before: {soundcloud: 2026-05-01}
   # Full-file fallback after regular sources fail (e.g. YouTube asks to sign in). Downloads and playback;
   # the same artist/title/version, duration and post-download checks apply. [] disables it.
-  download_fallback: [soundcloud]
+  download_fallback: [soundcloud, internet_archive]
   # Re-uploads by small channels (YouTube, SoundCloud). An explicit Russian track takes one, titled "(без цензуры)"
   # or uploaded before 2026-03-01, when the sources above have no copy known to be uncensored.
   reuploads: [yt_reupload, soundcloud]

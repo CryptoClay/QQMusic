@@ -14,7 +14,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.schemas import HealthOut
-from app.auth import admin_user
+from app.auth import admin_user, current_user
 from app.config import get_settings
 from app.db import get_session
 from app.library.navidrome import admin_client
@@ -23,6 +23,39 @@ from app.services import svc
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["system"])
+
+
+@router.get('/api/system/sources')
+async def source_states(user: User = Depends(current_user)):
+    import os
+    import time
+
+    from app.source_status import snapshot
+
+    rows = []
+    for name, provider in svc.providers.items():
+        access = getattr(provider, '_youtube', None)
+        if access:
+            access.refresh()
+        rows.append({'name': name, **snapshot(name),
+                     'cooldown_s': max(0, round(access._blocked_until - time.monotonic())) if access else 0})
+    return {'sources': rows, 'cookies_configured': bool(os.environ.get('YTDLP_COOKIES_FILE'))}
+
+
+@router.post('/api/system/sources/check')
+async def check_sources(user: User = Depends(admin_user)):
+    from app.providers.base import TrackQuery
+    from app.source_status import record
+
+    async def check(name, provider):
+        try:
+            async with asyncio.timeout(8):
+                await provider.search(TrackQuery(artist='Кино', title='Группа крови'), limit=1)
+            record(name, 'search', True)
+        except Exception as error:
+            record(name, 'search', False, str(error))
+    await asyncio.gather(*(check(name, provider) for name, provider in svc.providers.items()))
+    return await source_states(user)
 
 
 async def _navidrome_ok() -> bool:
@@ -188,7 +221,6 @@ async def apk_file():
 async def apk_artifact(name: str):
     from fastapi import HTTPException
     from fastapi.responses import FileResponse
-
     from starlette.concurrency import run_in_threadpool
 
     path = await run_in_threadpool(_artifact, name, verify=True)

@@ -1,9 +1,9 @@
 @echo off
 chcp 65001 >nul
-rem Toggle the HomeMusic stack (Navidrome, Hub, tunnel): starts it when it is off or partly down, stops it when it runs.
+rem Toggle the QQMusic stack (Navidrome, Hub, tunnel): starts it when it is off or partly down, stops it when it runs.
 rem Starts Docker Desktop if needed. Never stops Docker Desktop itself: other containers may run in it.
 setlocal
-title HomeMusic
+title QQMusic
 cd /d "%~dp0"
 
 docker info >nul 2>&1
@@ -38,7 +38,7 @@ goto wait_docker
 
 
 :start
-echo Запускаю HomeMusic: Navidrome, Хаб, туннель...
+echo Запускаю QQMusic: Navidrome, Хаб, туннель...
 docker compose up -d
 if errorlevel 1 goto fail
 echo Жду, пока Хаб ответит...
@@ -56,18 +56,18 @@ goto wait_hub
 
 :started
 echo.
-echo HomeMusic включён.
+echo QQMusic включён.
 echo   Хаб:       http://localhost:8080
 echo   Navidrome: http://localhost:4533
 goto done
 
 
 :stop
-echo HomeMusic работает.
+echo QQMusic работает.
 set ACTIVE=0
 for /f %%n in ('docker exec homemusic_hub python -c "import sqlite3;c=sqlite3.connect('file:/data/hub.sqlite3?mode=ro',uri=True);print(c.execute('select count(*) from download_items where status in (?,?,?,?,?)',('queued','searching','downloading','tagging','importing')).fetchone()[0])" 2^>nul') do set ACTIVE=%%n
 if not "%ACTIVE%"=="0" echo Загрузок в очереди: %ACTIVE%. Они продолжатся после включения.
-choice /c YN /m "Выключить HomeMusic (у пользователей пропадёт музыка)?"
+choice /c YN /m "Выключить QQMusic (у пользователей пропадёт музыка)?"
 if errorlevel 2 (
   echo Отменено.
   goto done
@@ -76,8 +76,8 @@ echo Выключаю...
 docker compose stop
 if errorlevel 1 goto fail
 echo.
-echo HomeMusic выключен. Docker Desktop продолжает работать.
-echo После перезагрузки ПК HomeMusic останется выключенным, пока его не включить этим файлом.
+echo QQMusic выключен. Docker Desktop продолжает работать.
+echo После перезагрузки ПК QQMusic останется выключенным, пока его не включить этим файлом.
 goto done
 
 

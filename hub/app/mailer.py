@@ -42,7 +42,7 @@ async def send(to: str, subject: str, text: str) -> None:
     st = get_settings()
     sender = st.smtp_from or st.smtp_user
     msg = EmailMessage()
-    msg["From"] = formataddr(("HomeMusic", sender))
+    msg["From"] = formataddr(("QQMusic", sender))
     msg["To"] = to
     msg["Subject"] = subject
     msg["Message-ID"] = make_msgid(domain=sender.rpartition("@")[2] or None)

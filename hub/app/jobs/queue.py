@@ -97,7 +97,7 @@ def background_slots() -> int:
 
 # a queued job a worker may take now: urgent, or background while a background slot is free
 _CLAIMABLE = (
-    "status='queued' AND (priority >= 0 OR "
+    "status='queued' AND kind != 'assistant_task' AND (priority >= 0 OR "
     "(SELECT COUNT(*) FROM jobs WHERE status='running' AND priority < 0) < :bg)"
 )
 
@@ -151,6 +151,9 @@ async def _next_wakeup_in() -> float:
 
 
 async def run_job(job: Job) -> None:
+    # Legacy assistant jobs are retained for compatibility, never executed by this server.
+    if job.kind == "assistant_task":
+        return
     fn = _handlers.get(job.kind)
     if fn is None:
         await _finish(job.id, ok=False, error=f"no handler for {job.kind}")

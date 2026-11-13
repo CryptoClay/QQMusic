@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
-import { api } from '../api/client';
+import { api, request } from '../api/client';
 import type { DownloadItemOut } from '../api/types';
 import { Icon } from '../components/Icon';
+import { sourceErrorSummary } from '../components/SourceProblem';
 import { Button, Cover, Empty, ErrorState, IconButton, PageHeader, ProgressBar, Segmented, SkeletonRows, StatusChip, cx } from '../components/ui';
+import { useDesktop } from '../lib/desktop';
 import { useHubConnected, useHubEvent } from '../lib/events';
 import { DOWNLOAD_ACTIVE, fmtWhen, providerLabel, warningText } from '../lib/format';
 import { useAsync, useInterval } from '../lib/hooks';
@@ -18,6 +20,8 @@ export function DownloadsPage() {
   const [filter, setFilter] = useState<Filter>('all');
   const [clearing, setClearing] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [reason, setReason] = useState('all');
+  const [retrying, setRetrying] = useState(false);
 
   // Live updates: upsert the item; unknown items (new batches) are prepended.
   useHubEvent('download', (d) => {
@@ -47,7 +51,8 @@ export function DownloadsPage() {
     }),
     [items],
   );
-  const shown = items.filter((x) =>
+  const byReason = (error: string | null | undefined) => { const t=(error??'').toLowerCase(); return /cookies|робот|not a bot|сессия/.test(t)?'session':/403|forbidden/.test(t)?'access':/ssl|tls|timeout|сеть|ожидания/.test(t)?'network':'other'; };
+  const shown = items.filter((x) => reason==='all' || byReason(x.error)===reason).filter((x) =>
     filter === 'active' ? DOWNLOAD_ACTIVE.includes(x.status) : filter === 'problems' ? x.status === 'failed' || x.status === 'needs_review' : true,
   );
 
@@ -68,8 +73,12 @@ export function DownloadsPage() {
     if (r) res.setData((prev) => prev?.map((x) => (x.id === r.id ? { ...x, ...r } : x)));
   };
 
+  const desktop = useDesktop();
+  const repeatProblems = async () => {setRetrying(true);const ids=shown.filter((x)=>['failed','needs_review'].includes(x.status)).slice(0,100).map((x)=>x.id); const result=await attempt(()=>request<{queued:number}>('POST','/api/downloads/retry-batch',{json:{ids}})); if(result){toast(`Повторно поставлено в очередь: ${result.queued}`,'success');res.reload();}setRetrying(false);};
+  const priority = async (id:number) => {const result=await attempt(()=>request('POST',`/api/downloads/items/${id}/priority`));if(result)toast('Загрузка будет взята первой из ожидающих','success');};
+
   return (
-    <div>
+    <div className={desktop ? 'w-full max-w-[900px] px-8 pb-12' : ''}>
       <PageHeader
         title="Загрузки"
         sub={
@@ -109,6 +118,7 @@ export function DownloadsPage() {
         />
       </div>
 
+      <div className="flex flex-wrap items-center gap-2 px-4 pb-4"><select className="input w-auto max-w-full text-sm" aria-label="Причина ошибки" value={reason} onChange={(e)=>setReason(e.target.value)}><option value="all">Все причины</option><option value="session">Вход и cookies</option><option value="access">Отказ в доступе</option><option value="network">Сеть и таймауты</option><option value="other">Другие ошибки</option></select><Button small busy={retrying} disabled={!shown.some((x)=>['failed','needs_review'].includes(x.status))} onClick={()=>void repeatProblems()}>Повторить проблемы · до 100</Button></div>
       {res.loading ? (
         <SkeletonRows />
       ) : res.error ? (
@@ -130,6 +140,7 @@ export function DownloadsPage() {
               busy={busyId === item.id}
               onRetry={() => act(item, 'retry')}
               onCancel={() => act(item, 'cancel')}
+              onPriority={() => void priority(item.id)}
               onPlay={canPlay() && item.status === 'done' && item.nd_song_id ? () => playList(shown.filter((x) => x.status === 'done'), (x) => x.nd_song_id, item) : undefined}
             />
           ))}
@@ -145,6 +156,7 @@ function DownloadRow({
   onRetry,
   onCancel,
   onPlay,
+  onPriority,
 }: {
   item: DownloadItemOut;
   busy: boolean;
@@ -152,6 +164,7 @@ function DownloadRow({
   onCancel: () => void;
   /** Done and scanned by Navidrome: plays it (and the finished ones around it) in the app's player. */
   onPlay?: () => void;
+  onPriority: () => void;
 }) {
   const active = DOWNLOAD_ACTIVE.includes(item.status);
   const problem = item.status === 'failed' || item.status === 'needs_review';
@@ -179,11 +192,12 @@ function DownloadRow({
               {w}
             </div>
           ))}
-          {problem && item.error && <div className="mt-1 line-clamp-2 text-xs text-danger">{item.error}</div>}
+          {problem && item.error && <div className="mt-1 line-clamp-2 text-xs text-danger">{sourceErrorSummary(item.error)}</div>}
           {item.status === 'needs_review' && <div className="mt-1 text-xs font-medium text-warn">Нажмите, чтобы выбрать файл вручную</div>}
         </div>
       </Link>
       <div className="flex shrink-0 flex-col items-center">
+        {item.status==='queued' && <IconButton icon="back" className="rotate-90" label="Повысить приоритет" onClick={onPriority} />}
         {active ? (
           <IconButton icon="x" label="Отменить" busy={busy} onClick={onCancel} className="text-muted" />
         ) : problem || item.status === 'cancelled' ? (

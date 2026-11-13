@@ -52,6 +52,33 @@ async def test_background_work_leaves_a_worker_for_the_user(db):
     assert await _claimed() == "listen"
 
 
+async def test_disabled_assistant_jobs_remain_queued_without_blocking_other_work(db):
+    assistant_id = await _add("assistant_task", priority=100)
+    await _add("download_item")
+    assert await _claimed() == "download_item"
+    assert await _claimed() is None
+    assert await queue._next_wakeup_in() == 30.0
+    called = []
+
+    async def handler(job):
+        called.append(job.id)
+
+    old_handler = queue._handlers.get("assistant_task")
+    queue._handlers["assistant_task"] = handler
+    try:
+        async with session_scope() as s:
+            job = await s.get(Job, assistant_id)
+            assert job.status == "queued" and job.attempts == 0
+            await queue.run_job(job)
+            assert job.status == "queued" and job.attempts == 0
+        assert not called
+    finally:
+        if old_handler is None:
+            queue._handlers.pop("assistant_task", None)
+        else:
+            queue._handlers["assistant_task"] = old_handler
+
+
 async def test_background_job_runs_with_background_network_priority(db):
     from app.net import in_background
 

@@ -25,7 +25,7 @@ from app.config import Settings, get_settings
 
 log = logging.getLogger(__name__)
 
-OPENROUTER_HEADERS = {"HTTP-Referer": "https://github.com/homemusic", "X-Title": "HomeMusic"}
+OPENROUTER_HEADERS = {"HTTP-Referer": "https://github.com/homemusic", "X-Title": "QQMusic"}
 _LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", "host.docker.internal", "ollama"}
 OLLAMA_PORT = 11434
 

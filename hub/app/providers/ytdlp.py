@@ -138,6 +138,9 @@ class YoutubeAccess:
 
 _media_hosts: dict[str, tuple[float, bool]] = {}  # googlevideo host -> (monotonic time, answers)
 _media_lock = threading.Lock()
+# YoutubeDL lazily imports process-wide plugins in its constructor. Concurrent first
+# instances otherwise race while registering the same PO-token provider.
+_ydl_init_lock = threading.Lock()
 
 
 def _media_host_answers(host: str) -> bool:
@@ -449,6 +452,7 @@ def ytsearch_query(prefix: str, text: str, limit: int) -> str:
 
 class YtdlpProvider:
     name = "ytdlp"
+    bounded_fetch = True
 
     def __init__(self, cfg: YtdlpCfg, *, use_music_search: bool = True, max_parallel: int | None = None,
                  access: YoutubeAccess | None = None) -> None:
@@ -519,7 +523,9 @@ class YtdlpProvider:
             except (OSError, LoadError, ValueError):
                 # Cookie parser exceptions may contain credentials from the offending line.
                 raise ProviderError("Не удалось прочитать cookies YouTube. Владельцу сервера нужно проверить файл cookies.") from None
-        with yt_dlp.YoutubeDL({**self._base_opts(), **opts}) as ydl:
+        with _ydl_init_lock:
+            instance = yt_dlp.YoutubeDL({**self._base_opts(), **opts})
+        with instance as ydl:
             for cookie in cookies:
                 if cookie.domain.lstrip(".") == "youtube.com" or cookie.domain.endswith(".youtube.com"):
                     # Netscape exports use 0 for session cookies; the stdlib treats it as already expired.
@@ -715,7 +721,8 @@ class YtdlpProvider:
         """The page yt-dlp downloads the candidate from."""
         return WATCH_URL.format(id=c.provider_id)
 
-    async def fetch(self, c: Candidate, dest_dir: Path, on_progress: ProgressCb | None = None) -> Path:
+    async def fetch(self, c: Candidate, dest_dir: Path, on_progress: ProgressCb | None = None,
+                    max_bytes: int | None = None) -> Path:
         dest_dir = Path(dest_dir)
         await asyncio.to_thread(dest_dir.mkdir, parents=True, exist_ok=True)
         loop = asyncio.get_running_loop()
@@ -735,6 +742,9 @@ class YtdlpProvider:
             if cancelled.is_set():
                 raise DownloadCancelled("cancelled")
             if d.get("status") == "downloading":
+                from app.net import in_background
+                if max_bytes and in_background() and d.get("downloaded_bytes", 0) > max_bytes:
+                    raise DownloadCancelled("Превышен лимит предварительной загрузки")
                 total = d.get("total_bytes") or d.get("total_bytes_estimate")
                 if total:
                     emit(min(0.99, d.get("downloaded_bytes", 0) / total))
@@ -755,9 +765,26 @@ class YtdlpProvider:
         }
 
         def download() -> Path:
-            with self._youtube_dl(opts) as ydl:
-                info = ydl.extract_info(self.media_url(c), download=False, process=False)
-                info = ydl.process_ie_result(on_answering_servers(info), download=True)
+            for alternate in (False, True) if self._youtube else (False,):
+                attempt = dict(opts)
+                if alternate:
+                    args = deepcopy(self._base_opts().get("extractor_args", {}))
+                    args.setdefault("youtube", {})["player_client"] = ["web_safari"]
+                    attempt.update(extractor_args=args, format="bestaudio/best[height<=480]/best")
+                try:
+                    with self._youtube_dl(attempt) as ydl:
+                        info = ydl.extract_info(self.media_url(c), download=False, process=False)
+                        info = ydl.process_ie_result(on_answering_servers(info), download=True)
+                    break
+                except DownloadError as e:
+                    message = str(e).lower()
+                    if (self._youtube and not alternate and "http error 403" in message
+                            and ("unable to download video data" in message or "fragment" in message)):
+                        # Metadata and even an initial byte range may work while the rest of
+                        # mweb's media is refused. Extract this same video afresh with HLS.
+                        log.warning("youtube %s: media returned 403, retrying with web_safari", c.provider_id)
+                        continue
+                    raise
             for rd in (info or {}).get("requested_downloads") or []:
                 if (fp := rd.get("filepath")) and Path(fp).is_file():
                     return Path(fp)

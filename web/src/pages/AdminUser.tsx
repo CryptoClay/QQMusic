@@ -8,16 +8,9 @@ import { ListeningTab } from './insights/Listening';
 import { MapTab } from './insights/MapTab';
 import { MixesTab, WavesTab } from './insights/Recs';
 import { TasteTab } from './insights/Taste';
-import { downloadStatusLabel, fmtDate, fmtUsd, fmtWhen, inputKindLabel, plural } from '../lib/format';
+import { downloadStatusLabel, fmtDate, fmtWhen } from '../lib/format';
 import { useAsync } from '../lib/hooks';
 import { Stat, UserBadges } from './Admin';
-
-const MONTHS = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
-
-function monthLabel(m: string): string {
-  const [y, mm] = m.split('-').map(Number);
-  return `${MONTHS[mm - 1] ?? m} ${y}`;
-}
 
 const TABS = [
   { value: 'overview', label: 'Обзор' },
@@ -73,9 +66,6 @@ function OverviewTab({ u }: { u: AdminUserDetailOut }) {
       </div>
 
       <div className="grid grid-cols-3 gap-2 px-4">
-        <Stat value={fmtUsd(u.ai_cost_30d_usd)} label="ИИ за 30 дней" />
-        <Stat value={fmtUsd(u.ai_cost_usd)} label="ИИ всего" />
-        <Stat value={String(u.ai_requests)} label={plural(u.ai_requests, ['запрос к ИИ', 'запроса к ИИ', 'запросов к ИИ'])} />
         <Stat value={String(u.downloads_done)} label="скачано" />
         <Stat value={String(u.tracks_added)} label="в библиотеке" />
         <Stat value={String(u.uploads)} label="своих файлов" />
@@ -95,38 +85,7 @@ function OverviewTab({ u }: { u: AdminUserDetailOut }) {
         <Row k="Последний раз в Хабе" v={fmtWhen(u.last_seen_at) || '—'} />
         <Row k="Последний раз в плеере" v={fmtWhen(u.player_seen_at) || '—'} />
         <Row k="Google" v={u.google_email || 'не привязан'} />
-        <Row k="Последний запрос к ИИ" v={fmtWhen(u.ai_last_at) || '—'} />
       </dl>
-
-      {u.ai_months.length > 0 && (
-        <>
-          <SectionTitle>ИИ по месяцам</SectionTitle>
-          <dl className="mx-4 overflow-hidden rounded-xl bg-surface text-sm">
-            {u.ai_months.map((m) => (
-              <Row key={m.month} k={monthLabel(m.month)} v={`${fmtUsd(m.cost_usd)} · ${m.requests} ${plural(m.requests, ['запрос', 'запроса', 'запросов'])}`} />
-            ))}
-          </dl>
-        </>
-      )}
-
-      {u.ai_recent.length > 0 && (
-        <>
-          <SectionTitle>Последние запросы к ИИ</SectionTitle>
-          <ul className="mx-4 overflow-hidden rounded-xl bg-surface text-sm">
-            {u.ai_recent.map((r, i) => (
-              <li key={i} className="flex min-h-12 items-center gap-3 border-b border-line/60 px-4 py-2 last:border-0">
-                <span className="min-w-0 flex-1">
-                  <span className="block">{inputKindLabel(r.kind)}</span>
-                  <span className="block text-xs text-muted">
-                    {fmtWhen(r.created_at)} · {(r.tokens_in + r.tokens_out).toLocaleString('ru-RU')} токенов
-                  </span>
-                </span>
-                <span className="shrink-0 font-semibold">{fmtUsd(r.cost_usd)}</span>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
 
       {u.recent_downloads.length > 0 && (
         <>

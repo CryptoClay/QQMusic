@@ -1,4 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { request } from '../api/client';
+import { useDesktop } from '../lib/desktop';
 import { STANDALONE } from '../lib/embedded';
 import { useSession } from '../lib/session';
 import { Icon, type IconName } from '../components/Icon';
@@ -25,15 +27,19 @@ export function MorePage() {
   const [perm, setPerm] = useState<NotifyPermission>(notifyPermission);
   const [canInstall, setCanInstall] = useState(!!deferredInstall);
   const smart = useSmartEnabled();
+  const desktop = useDesktop();
+  const [warm, setWarm] = useState(() => { try { return localStorage.getItem('qqmusic-warm') !== 'off'; } catch { return true; } });
+  const toggleWarm = () => { const next=!warm; setWarm(next); try {localStorage.setItem('qqmusic-warm',next?'on':'off');} catch {} if(!next)void request('POST','/api/listen/prepare',{json:{refs:[]}}).catch(()=>{}); };
   const standalone = window.matchMedia('(display-mode: standalone)').matches;
 
   useEffect(() => {
     const on = () => setCanInstall(!!deferredInstall);
     window.addEventListener('beforeinstallprompt', on);
-    window.addEventListener('appinstalled', on);
+    const installed = () => { deferredInstall = null; setCanInstall(false); };
+    window.addEventListener('appinstalled', installed);
     return () => {
       window.removeEventListener('beforeinstallprompt', on);
-      window.removeEventListener('appinstalled', on);
+      window.removeEventListener('appinstalled', installed);
     };
   }, []);
 
@@ -63,6 +69,42 @@ export function MorePage() {
     unsupported: 'Не поддерживаются этим браузером',
   };
 
+  if (desktop) return (
+    <div className="px-6 pb-10 pt-7 xl:px-8">
+      <header><h1 className="text-3xl font-bold tracking-tight">Настройки</h1><p className="mt-1.5 text-sm text-muted">Аккаунт, воспроизведение и управление сервисом</p></header>
+      <div className="mt-8 grid max-w-5xl gap-6 min-[1280px]:grid-cols-2">
+        <SettingsGroup title="Аккаунт">
+          <li className="flex min-h-16 items-center gap-4 border-b border-line/60 px-4 py-3">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent font-bold uppercase text-on-accent">{me.username.slice(0, 1)}</span>
+            <span className="min-w-0"><span className="block truncate font-semibold" title={me.username}>{me.username}</span><span className="block break-all text-sm text-muted">{[me.is_admin ? 'Администратор' : 'Пользователь', me.email, me.google_email && `Google: ${me.google_email}`].filter(Boolean).join(' · ')}</span></span>
+          </li>
+          <Item icon="logout" title="Выйти" onClick={doLogout} danger />
+        </SettingsGroup>
+        <SettingsGroup title="Воспроизведение и уведомления">
+          <Item icon="download" title="Подготовка следующих треков" sub="До двух записей, до 64 MiB за очередь подготовки; отключается при экономии трафика" onClick={toggleWarm} right={<Switch on={warm} />} />
+          <Item icon="refresh" to="/sources" title="Состояние источников" sub="Доступность поиска, аудио и авторизации" />
+          <Item icon="volume" to="/music-settings" title="Музыка и звук" sub="Версии треков, радио, эквалайзер и переходы" />
+          <Item icon="note" to="/notes" title="Мои заметки и метки" sub="Личные подборки и заметки о музыке" />
+          <Item icon="wave" to="/recap" title="Мои музыкальные итоги" sub="Любимые исполнители и открытия месяца" />
+          <Item icon="shuffleSmart" title="Умное перемешивание" sub="Добавляет рекомендации в плейлистах и избранном" onClick={() => setSmartEnabled(!smart)} right={<Switch on={smart} />} />
+          <Item icon="bell" title="Уведомления" sub={permText[perm]} onClick={perm === 'default' ? enableNotifications : undefined} right={perm === 'granted' ? <Icon name="check" size={20} className="text-accent" /> : undefined} />
+        </SettingsGroup>
+        <SettingsGroup title="Музыка и устройства">
+          <Item icon="upload" to="/upload" title="Загрузить файлы" sub="Добавить аудиофайлы в библиотеку" />
+          <Item icon="library" to="/nextcloud" title="Nextcloud" sub="Личная музыка из вашего облака" />
+          <Item icon="transfer" to="/import" title="Перенести музыку" sub="Из Яндекс Музыки: избранное, плейлисты и альбомы" />
+          <Item icon="install" href="/app/latest.apk" title="Приложение для Android" sub="Офлайн, плеер в шторке, тот же аккаунт" />
+          {canInstall && !standalone && <Item icon="install" title="Установить приложение" sub="На домашний экран" onClick={install} />}
+        </SettingsGroup>
+        {(me.is_admin || me.public_music_url) && <SettingsGroup title="Сервис">
+          {me.is_admin && <Item icon="user" to="/admin" title="Пользователи и приглашения" sub="Пользователи, песни и коды приглашений" />}
+          {me.public_music_url && <Item icon="external" href={me.public_music_url} title="Navidrome" sub="Веб-интерфейс библиотеки" />}
+        </SettingsGroup>}
+      </div>
+      <p className="mt-8 text-sm text-muted">QQMusic · музыкальный сервис</p>
+    </div>
+  );
+
   return (
     <div>
       <PageHeader title="Ещё" />
@@ -79,7 +121,11 @@ export function MorePage() {
       </div>
 
       <ul className="mx-4 overflow-hidden rounded-xl bg-surface">
-        {STANDALONE && <Item icon="sparkle" to="/assistant" title="Ассистент" sub="Скриншот, список или просьба — найдёт и скачает" />}
+        <Item icon="download" title="Подготовка следующих треков" sub="До двух записей; учитывает экономию трафика" onClick={toggleWarm} right={<Switch on={warm} />} />
+        <Item icon="refresh" to="/sources" title="Состояние источников" sub="Доступность поиска и аудио" />
+        <Item icon="volume" to="/music-settings" title="Музыка и звук" sub="Версии, радио, эквалайзер и переходы" />
+        <Item icon="note" to="/notes" title="Мои заметки и метки" sub="Только для вашего аккаунта" />
+        <Item icon="wave" to="/recap" title="Мои музыкальные итоги" sub="Ваш месяц в музыке" />
         {STANDALONE && (
           <Item
             icon="shuffleSmart"
@@ -89,12 +135,13 @@ export function MorePage() {
             right={<Switch on={smart} />}
           />
         )}
-        <Item icon="upload" to="/upload" title="Загрузить файлы" sub="Свои аудиофайлы с телефона" />
+        <Item icon="upload" to="/upload" title="Загрузить файлы" sub="Добавить свои аудиофайлы в библиотеку" />
+        <Item icon="library" to="/nextcloud" title="Nextcloud" sub="Личная музыка из вашего облака" />
         <Item icon="playlist" to="/playlists" title="Плейлисты" sub="Ваши плейлисты в Navidrome" />
         <Item icon="transfer" to="/import" title="Перенести музыку" sub="Из Яндекс Музыки: ♥, плейлисты, альбомы" />
-        {me.is_admin && <Item icon="user" to="/admin" title="Пользователи и приглашения" sub="Расходы на ИИ, песни, коды для новых людей" />}
+        {me.is_admin && <Item icon="user" to="/admin" title="Пользователи и приглашения" sub="Пользователи, песни и коды приглашений" />}
         {/* the player is here: in the browser, and the app's own on Android */}
-        <Item icon="install" href="/app/latest.apk" title="Приложение для Android" sub="HomeMusic: офлайн, плеер в шторке, тот же аккаунт" />
+        <Item icon="install" href="/app/latest.apk" title="Приложение для Android" sub="Офлайн, плеер в шторке, тот же аккаунт" />
         {me.public_music_url && <Item icon="external" href={me.public_music_url} title="Navidrome" sub="Веб-интерфейс библиотеки" />}
         <Item
           icon="bell"
@@ -103,13 +150,17 @@ export function MorePage() {
           onClick={perm === 'default' ? enableNotifications : undefined}
           right={perm === 'granted' ? <Icon name="check" size={20} className="text-accent" /> : undefined}
         />
-        {canInstall && !standalone && <Item icon="install" title="Установить приложение" sub="На домашний экран, с «Поделиться» → HomeMusic" onClick={install} />}
+        {canInstall && !standalone && <Item icon="install" title="Установить приложение" sub="На домашний экран, с «Поделиться» → QQMusic" onClick={install} />}
         <Item icon="logout" title="Выйти" onClick={doLogout} danger />
       </ul>
 
-      <p className="px-6 py-6 text-center text-xs text-dim">HomeMusic · личный музыкальный сервис</p>
+      <p className="px-6 py-6 text-center text-xs text-dim">QQMusic · музыкальный сервис</p>
     </div>
   );
+}
+
+function SettingsGroup({ title, children }: { title: string; children: ReactNode }) {
+  return <section className="min-w-0"><h2 className="mb-3 text-lg font-semibold">{title}</h2><ul className="overflow-hidden rounded-xl border border-line bg-surface">{children}</ul></section>;
 }
 
 function Switch({ on }: { on: boolean }) {
@@ -144,7 +195,7 @@ function Item({
       <Icon name={icon} size={22} className={danger ? 'text-danger' : 'text-muted'} />
       <span className="min-w-0 flex-1">
         <span className={cx('block', danger && 'text-danger')}>{title}</span>
-        {sub && <span className="block truncate text-xs text-muted">{sub}</span>}
+        {sub && <span className="mt-0.5 block text-xs leading-5 text-muted">{sub}</span>}
       </span>
       {right ?? ((to || href || onClick) && <Icon name={href ? 'external' : 'chevron'} size={18} className="text-dim" />)}
     </>

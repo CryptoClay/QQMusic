@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { api } from '../api/client';
 import { setDisliked, useDisliked, type DislikeTarget } from '../lib/dislikes';
 import { STANDALONE } from '../lib/embedded';
-import { addToQueue, next, playNext, stopListening, useListen, type ListenTrack } from '../lib/listen';
+import { addToQueue, next, playNext, playPreview, stopListening, useListen, usePreview, type ListenTrack } from '../lib/listen';
 import { canPlayAll } from '../lib/player';
 import { enc, navigate } from '../lib/router';
 import { attempt } from '../lib/ui';
@@ -83,6 +83,7 @@ function TrackMenu({ track, extra, inPlayer, onClose }: { track: MenuTrack; extr
   const disliked = useDisliked(target);
   const artistDisliked = useDisliked(artist ?? { artist_ref: '\u0000' });
   const playing = useListen((s) => !!track.ref && s.track?.ref === track.ref);
+  const previewing = usePreview(track.ref);
   const hasQueue = useListen((s) => !!s.track);
   // the page's own player plays here (a browser, an app without `playQueue`)
   const queueable = !!track.listen && !canPlayAll() && !playing;
@@ -118,6 +119,10 @@ function TrackMenu({ track, extra, inPlayer, onClose }: { track: MenuTrack; extr
   return (
     <Sheet open onClose={onClose} title={`${track.artist} — ${track.title}`}>
       <div className="-mx-4 -my-3 flex flex-col py-1">
+        {(track.ref || track.nd_song_id) && <MenuItem icon="note" label="Текст, версия и заметки" onClick={()=>go(`/track/${enc(track.ref??`nd:${track.nd_song_id}`)}?title=${enc(track.title)}&artist=${enc(track.artist)}`)}/>}
+        {track.ref?.startsWith('dz:') && (
+          <MenuItem icon={previewing ? 'pause' : 'play'} label={previewing ? 'Остановить превью' : 'Послушать превью · 30 сек'} hint="Отдельно от очереди воспроизведения" onClick={() => { playPreview(track.ref as string); onClose(); }} />
+        )}
         {queueable && (
           <>
             <MenuItem

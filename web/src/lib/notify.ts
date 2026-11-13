@@ -125,13 +125,6 @@ export function startNotificationWatcher() {
         refresh();
       }, 800);
     }),
-    hubEvents.on('assistant', (d) => {
-      if (d.status === 'awaiting_confirmation') {
-        void notify('Ассистент нашёл треки', 'Проверьте список и подтвердите', `/assistant/${d.id}`, `as-${d.id}`);
-      } else if (d.status === 'failed') {
-        void notify('Ассистент', 'Задача завершилась с ошибкой', `/assistant/${d.id}`, `as-${d.id}`);
-      }
-    }),
   ];
 }
 

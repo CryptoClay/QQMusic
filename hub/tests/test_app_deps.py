@@ -20,6 +20,11 @@ def _routes(routes):
             yield from _routes(sub.routes)
 
 
+def test_assistant_routes_are_not_exposed() -> None:
+    assert not any(route.path.startswith("/api/assistant") for route in _routes(app.routes))
+    assert not any(path.startswith("/api/assistant") for path in app.openapi()["paths"])
+
+
 def test_db_session_is_function_scoped() -> None:
     seen = 0
     for route in _routes(app.routes):

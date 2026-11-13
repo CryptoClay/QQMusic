@@ -8,9 +8,9 @@ import { fileURLToPath } from 'node:url';
 const out = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'icons');
 mkdirSync(out, { recursive: true });
 
-const BG = [11, 11, 11];
-const GREEN = [30, 215, 96];
-const DARK = [11, 11, 11];
+const BG = [17, 18, 20];
+const ACCENT = [255, 147, 73];
+const DARK = [17, 18, 20];
 
 // --- PNG encoder ---------------------------------------------------------------------------------
 const crcTable = new Uint32Array(256).map((_, n) => {
@@ -97,7 +97,7 @@ function render(size, kind) {
             if (bg) {
               col = BG;
               const discR = kind === 'maskable' ? 0.3 : 0.36;
-              if (inCircle(x, y, 0.5, 0.5, discR)) col = inNote(x, y, kind === 'maskable' ? 0.62 : 0.75) ? DARK : GREEN;
+              if (inCircle(x, y, 0.5, 0.5, discR)) col = inNote(x, y, kind === 'maskable' ? 0.62 : 0.75) ? DARK : ACCENT;
             }
           }
           if (col) {
@@ -136,9 +136,9 @@ for (const [name, size, kind] of targets) {
 writeFileSync(
   join(out, 'icon.svg'),
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <rect width="100" height="100" rx="22" fill="#0b0b0b"/>
-  <circle cx="50" cy="50" r="36" fill="#1ed760"/>
-  <g fill="#0b0b0b" transform="translate(50 50) scale(.75) translate(-50 -50)">
+  <rect width="100" height="100" rx="22" fill="#111214"/>
+  <circle cx="50" cy="50" r="36" fill="#ff9349"/>
+  <g fill="#111214" transform="translate(50 50) scale(.75) translate(-50 -50)">
     <ellipse cx="38.5" cy="66" rx="8.5" ry="6.2" transform="rotate(-25.8 38.5 66)"/>
     <ellipse cx="64.5" cy="60" rx="8.5" ry="6.2" transform="rotate(-25.8 64.5 60)"/>
     <rect x="44.5" y="33" width="3.5" height="32"/>

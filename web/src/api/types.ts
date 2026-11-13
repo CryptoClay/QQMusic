@@ -359,6 +359,7 @@ export interface SearchTracksOut {
 export interface ProviderSearchOut {
   candidates: Candidate[];
   errors: string[];
+  versions?: Record<string,'original'|'edited'|'unknown'>;
 }
 
 // --- downloads --------------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 import { useEffect, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { goBack } from '../lib/router';
+import { useDesktop } from '../lib/desktop';
 import { downloadStatusLabel, percent } from '../lib/format';
 import type { OwnedStatus } from '../api/types';
 import { Icon, type IconName } from './Icon';
@@ -133,16 +134,17 @@ export function SkeletonRows({ n = 6 }: { n?: number }) {
 // --- layout -----------------------------------------------------------------------------------
 
 export function PageHeader({ title, back, right, sub }: { title: ReactNode; back?: string; right?: ReactNode; sub?: ReactNode }) {
+  const desktop = useDesktop();
   return (
-    <header className="pt-safe sticky top-0 z-20 bg-bg/90 backdrop-blur">
-      <div className="flex min-h-14 items-center gap-1 px-2">
+    <header className={desktop ? 'mb-5 bg-bg px-2 pt-5' : 'pt-safe sticky top-0 z-20 bg-bg/90 backdrop-blur'}>
+      <div className="flex min-h-14 items-center gap-2 px-2">
         {back !== undefined ? (
           <IconButton icon="back" label="Назад" onClick={() => goBack(back)} />
         ) : (
           <span className="w-2" />
         )}
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-lg font-bold">{title}</h1>
+            <h1 className={cx('truncate font-bold', desktop ? 'text-3xl tracking-tight' : 'text-lg')}>{title}</h1>
           {sub && <div className="truncate text-xs text-muted">{sub}</div>}
         </div>
         {right}

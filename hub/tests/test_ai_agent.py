@@ -1,7 +1,4 @@
-"""The assistant's chat with tools through the HTTP API: the model (a scripted OpenAI-compatible server) reads the
-account and changes ♥ and playlists itself; deleting waits for the user's confirmation. Navidrome is a mock that keeps
-playlists and stars.
-"""
+"""Unit coverage for the retained assistant module and its tools, without exposing its former HTTP API."""
 
 from __future__ import annotations
 
@@ -131,182 +128,52 @@ async def yandex_import() -> dict:
 
 
 async def chat(env, text: str, *script: dict) -> dict:
-    env["state"]["script"] = list(script)
-    r = await env["client"].post("/api/assistant/chat", json={"messages": [{"role": "user", "content": text}]})
-    assert r.status_code == 200, r.text
-    assert env["state"]["script"] == [], "the model was not asked every scripted step"
-    return r.json()
-
-
-async def test_daily_limit_covers_all_chats_images_and_legacy_tasks(env):
-    # One shared app for the full quota lifecycle avoids rebuilding it for each HTTP boundary.
-    from sqlalchemy import update
-
+    from sqlalchemy import select
+    from app.ai.agent import run_chat
     from app.db import session_scope
     from app.models import User
 
+    env["state"]["script"] = list(script)
     async with session_scope() as s:
-        await s.execute(update(User).values(is_admin=False))
-    c = env["client"]
-    # Rejected input and missing chats do not consume messages.
-    assert (await c.post("/api/assistant/chat", json={"messages": []})).status_code == 400
-    assert (await c.post("/api/assistant/chat", json={"messages": [{"role": "user", "content": " "}]})).status_code == 400
-    assert (await c.post("/api/assistant/tasks", json={"text": " "})).status_code == 400
-    missing = await c.post("/api/assistant/chat", json={"chat_id": 999, "messages": [{"role": "user", "content": "x"}]})
-    assert missing.status_code == 404
-    first = await chat(env, "Привет", completion("Привет"))  # 1: new chat
-    env["state"]["script"] = [completion("Да")]
-    response = await c.post("/api/assistant/chat", data={
-        "chat_id": str(first["chat_id"]), "messages": json.dumps([{"role": "user", "content": "Скриншот"}]),
-    }, files={"images": ("screen.png", b"image", "image/png")})  # 2: existing chat + image
-    assert response.status_code == 200, response.text
-    response = await c.post("/api/assistant/tasks", json={"url": "https://music.yandex.ru/album/10100"})  # 3
-    assert response.status_code == 200, response.text
-    response = await c.post("/api/assistant/tasks", files={"images": ("screen.png", b"image", "image/png")})  # 4
-    assert response.status_code == 200, response.text
-    last = await chat(env, "Удали плейлист", completion(calls=[tool_call("delete_playlist", playlist_ids=["pl1"])]),
-                      completion("Подтвердите удаление"))  # 5: another chat, multiple model calls
-    requests = len(env["state"]["llm_requests"])
-    assert (await c.delete(f"/api/assistant/chats/{first['chat_id']}")).status_code == 200
-    for path, kwargs in [
-        ("/api/assistant/chat", {"json": {"messages": [{"role": "user", "content": "Ещё"}]}}),
-        ("/api/assistant/chat", {"data": {"messages": '[{"role":"user","content":""}]'},
-                                 "files": {"images": ("s.png", b"image", "image/png")}}),
-        ("/api/assistant/tasks", {"json": {"text": "Ещё"}}),
-        ("/api/assistant/tasks", {"files": {"images": ("s.png", b"image", "image/png")}}),
-    ]:
-        denied = await c.post(path, **kwargs)
-        assert denied.status_code == 429, denied.text
-        assert "5 сообщений" in denied.json()["detail"]
-        assert int(denied.headers["Retry-After"]) > 0
-    assert len(env["state"]["llm_requests"]) == requests
-    # Completing an already paid-for proposal still works at the limit.
-    confirmed = await c.post(f"/api/assistant/chat/{last['task_id']}/confirm", json={
-        "confirm_token": last["confirm_token"], "chat_id": last["chat_id"],
-    })
-    assert confirmed.status_code == 200, confirmed.text
-    assert env["state"]["deleted"] == ["pl1"]
-    assert (await c.get("/api/assistant/chats")).status_code == 200
+        user = (await s.execute(select(User))).scalar_one()
+        result = await run_chat(s, user, [{"role": "user", "content": text}])
+    assert env["state"]["script"] == [], "the model was not asked every scripted step"
+    return result
 
 
-async def test_admin_can_send_more_than_five_messages(env):
-    # Seven real API turns verify the admin exemption with the production model-call path.
-    for _ in range(7):
-        await chat(env, "Привет", completion("Привет"))
-    assert len(env["state"]["llm_requests"]) == 7
+@pytest.mark.parametrize("size", [5000, 5001])
+def test_message_text_limit(size):
+    from fastapi import HTTPException
+    from app.ai.limits import validate_message_text
+
+    text = "🎵" * size
+    if size == 5000:
+        validate_message_text(text)
+    else:
+        with pytest.raises(HTTPException) as error:
+            validate_message_text(text)
+        assert error.value.status_code == 400
 
 
-async def test_model_failure_does_not_refund_an_accepted_message(env):
+async def test_daily_limit_and_admin_exemption(env):
+    from fastapi import HTTPException
     from sqlalchemy import select
-
     from app.ai.limits import reserve_message
     from app.db import session_scope
     from app.models import User
 
     async with session_scope() as s:
         user = (await s.execute(select(User))).scalar_one()
-        user.is_admin = False
-        for _ in range(4):
+        for _ in range(7):
             await reserve_message(s, user)
-    # Empty model script returns an immediate, non-retried error from the fake provider.
-    body = {"messages": [{"role": "user", "content": "Привет"}]}
-    failed = await env["client"].post("/api/assistant/chat", json=body)
-    assert failed.status_code == 502, failed.text
-    denied = await env["client"].post("/api/assistant/chat", json=body)
-    assert denied.status_code == 429, denied.text
-    assert len(env["state"]["llm_requests"]) == 1
-
-
-async def test_chat_sends_attached_screenshot_to_model(env):
-    env["state"]["script"] = [completion("На скриншоте вижу экран музыки.")]
-    response = await env["client"].post(
-        "/api/assistant/chat",
-        data={"messages": json.dumps([{"role": "user", "content": "Что на этом скриншоте?"}], ensure_ascii=False)},
-        files={"images": ("screen.png", b"screenshot-bytes", "image/png")},
-    )
-    assert response.status_code == 200, response.text
-    sent = env["state"]["llm_requests"][-1]["messages"][-1]
-    assert sent["role"] == "user"
-    assert sent["content"][0]["text"] == "Что на этом скриншоте?"
-    assert sent["content"][1]["type"] == "image_url"
-    assert "c2NyZWVuc2hvdC1ieXRlcw==" in sent["content"][1]["image_url"]["url"]
-
-
-@pytest.mark.parametrize("path", ["chat", "tasks"])
-@pytest.mark.parametrize("count", [15, 16], ids=["at-limit", "over-limit"])
-@pytest.mark.parametrize("admin", [True, False], ids=["admin", "ordinary"])
-async def test_photos_per_message_limit(env, path, count, admin):
-    from sqlalchemy import func, select, update
-
-    from app.db import session_scope
-    from app.models import AssistantDailyUsage, AssistantTask, User
-
-    async with session_scope() as s:
-        await s.execute(update(User).values(is_admin=admin))
-    env["state"]["script"] = [completion("Вижу фотографии")]
-    files = [("images", (f"image-{i}.png", b"image", "image/png")) for i in range(count)]
-    response = await env["client"].post(f"/api/assistant/{path}",
-        data={"messages": '[{"role":"user","content":""}]'} if path == "chat" else {}, files=files)
-    if count > 15:
-        assert response.status_code == 400, response.text
-        assert "15 фотографий" in response.json()["detail"]
-        assert env["state"]["llm_requests"] == []
-    else:
-        assert response.status_code == 200, response.text
-        if path == "chat":
-            sent = env["state"]["llm_requests"][0]["messages"][-1]["content"]
-            assert len([part for part in sent if part["type"] == "image_url"]) == 15
-        else:
-            async with session_scope() as s:
-                task = await s.get(AssistantTask, response.json()["id"])
-                assert task.input_ref["count"] == 15
-    async with session_scope() as s:
-        charged = await s.scalar(select(func.sum(AssistantDailyUsage.messages)))
-        assert (charged or 0) == (1 if count == 15 and not admin else 0)
-        if count > 15:
-            assert await s.scalar(select(func.count()).select_from(AssistantTask)) == 0
-
-
-@pytest.mark.parametrize("kind", ["chat-json", "chat-multipart", "task-json", "task-multipart", "task-url"])
-@pytest.mark.parametrize("size", [5000, 5001], ids=["at-limit", "over-limit"])
-async def test_message_text_limit(env, kind, size):
-    from sqlalchemy import func, select, update
-
-    from app.db import session_scope
-    from app.models import AssistantDailyUsage, AssistantTask, User
-
-    async with session_scope() as s:
-        await s.execute(update(User).values(is_admin=False))
-    # Astral characters count as one character, matching the browser's Array.from count.
-    text = "🎵" * (size - 3) + "END"
-    env["state"]["script"] = [completion("Принято")]
-    is_chat = kind.startswith("chat-")
-    path = "chat" if is_chat else "tasks"
-    body = {"messages": [{"role": "user", "content": text}]} if is_chat else {"url" if kind == "task-url" else "text": text}
-    if kind.endswith("multipart"):
-        data = {"messages": json.dumps(body["messages"])} if is_chat else body
-        response = await env["client"].post(f"/api/assistant/{path}", data=data,
-            files={"images": ("screen.png", b"image", "image/png")} if is_chat else {"unused": (None, "")})
-    else:
-        response = await env["client"].post(f"/api/assistant/{path}", json=body)
-    if size > 5000:
-        assert response.status_code == 400, response.text
-        assert "5000 символов" in response.json()["detail"]
-        assert env["state"]["llm_requests"] == []
-    else:
-        assert response.status_code == 200, response.text
-        if is_chat:
-            sent = env["state"]["llm_requests"][0]["messages"][-1]["content"]
-            assert (sent[0]["text"] if isinstance(sent, list) else sent) == text
-        else:
-            async with session_scope() as s:
-                task = await s.get(AssistantTask, response.json()["id"])
-                assert task.input_ref["url" if kind == "task-url" else "text"] == text
-    async with session_scope() as s:
-        charged = await s.scalar(select(func.sum(AssistantDailyUsage.messages)))
-        assert (charged or 0) == (1 if size == 5000 else 0)
-        if size > 5000:
-            assert await s.scalar(select(func.count()).select_from(AssistantTask)) == 0
+        user.is_admin = False
+        await s.commit()
+        for _ in range(5):
+            await reserve_message(s, user)
+        with pytest.raises(HTTPException) as error:
+            await reserve_message(s, user)
+        assert error.value.status_code == 429
+        assert int(error.value.headers["Retry-After"]) > 0
 
 
 def tool_results(env) -> list[dict]:
@@ -359,12 +226,20 @@ async def test_deleting_a_playlist_waits_for_confirmation(env):
     assert env["state"]["deleted"] == []
     assert out["actions"] == [{"type": "delete_playlist", "playlist_id": "pl1", "name": "Тест"}]
     assert out["summary"] == "Удалить плейлист «Тест»"
-    c = env["client"]
-    r = await c.post(f"/api/assistant/chat/{out['task_id']}/confirm", json={"confirm_token": "wrong"})
-    assert r.status_code == 403, r.text
-    r = await c.post(f"/api/assistant/chat/{out['task_id']}/confirm", json={"confirm_token": out["confirm_token"]})
-    assert r.status_code == 200, r.text
-    assert r.json() == {"ok": True, "playlists_deleted": ["pl1"], "tracks_deleted": 0}
+    from fastapi import HTTPException
+    from sqlalchemy import select
+    from app.ai.agent import confirm_chat
+    from app.db import session_scope
+    from app.models import AssistantTask, User
+
+    async with session_scope() as s:
+        user = (await s.execute(select(User))).scalar_one()
+        task = await s.get(AssistantTask, out["task_id"])
+        with pytest.raises(HTTPException) as error:
+            await confirm_chat(s, user, task, "wrong")
+        assert error.value.status_code == 403
+        result = await confirm_chat(s, user, task, out["confirm_token"])
+    assert result == {"ok": True, "playlists_deleted": ["pl1"], "tracks_deleted": 0}
     assert env["state"]["deleted"] == ["pl1"]
 
 
@@ -377,53 +252,5 @@ async def test_a_bad_song_set_is_an_error_for_the_model(env, args):
 
 
 async def test_changes_made_stay_listed_when_the_model_stops_answering(env):
-    env["state"]["script"] = [completion(calls=[tool_call("star", song_ids=["ndA"])])]  # then the server fails
-    r = await env["client"].post("/api/assistant/chat", json={"messages": [{"role": "user", "content": "♥"}]})
-    assert r.status_code == 200, r.text
-    assert r.json()["done"] == ["♥ поставлено: 1 трек"]
-
-
-async def test_chat_turns_are_saved_and_continue_the_same_chat(env):
-    c = env["client"]
-    first = await chat(env, "поставь ♥ Группе крови", completion(calls=[tool_call("star", song_ids=["ndA"])]),
-                       completion("Поставил."))
-    chat_id = first["chat_id"]
-    assert first["title"] == "поставь ♥ Группе крови"
-    env["state"]["script"] = [completion("Пожалуйста.")]
-    r = await c.post("/api/assistant/chat", json={"chat_id": chat_id, "messages": [
-        {"role": "user", "content": "поставь ♥ Группе крови"}, {"role": "assistant", "content": "Поставил."},
-        {"role": "user", "content": "спасибо"}]})
-    assert r.status_code == 200, r.text
-    assert r.json()["chat_id"] == chat_id
-
-    r = await c.get("/api/assistant/chats")
-    assert [(x["id"], x["title"], x["messages"]) for x in r.json()] == [(chat_id, "поставь ♥ Группе крови", 4)]
-    saved = (await c.get(f"/api/assistant/chats/{chat_id}")).json()["messages"]
-    assert [(m["role"], m["content"]) for m in saved] == [
-        ("user", "поставь ♥ Группе крови"), ("assistant", "Поставил."), ("user", "спасибо"), ("assistant", "Пожалуйста.")]
-    assert saved[1]["done"] == ["♥ поставлено: 1 трек"]
-
-    assert (await c.delete(f"/api/assistant/chats/{chat_id}")).status_code == 200
-    assert (await c.get("/api/assistant/chats")).json() == []
-    r = await c.post("/api/assistant/chat", json={"chat_id": chat_id, "messages": [{"role": "user", "content": "ещё"}]})
-    assert r.status_code == 404, r.text
-
-
-async def test_saved_chat_remembers_screenshots_and_the_answer_to_a_proposal(env):
-    c = env["client"]
-    env["state"]["script"] = [completion(calls=[tool_call("delete_playlist", playlist_ids=["pl1"])]),
-                              completion("Удалю после подтверждения.")]
-    r = await c.post("/api/assistant/chat", data={"messages": json.dumps([{"role": "user", "content": ""}])},
-                     files={"images": ("screen.png", b"png", "image/png")})
-    assert r.status_code == 200, r.text
-    out = r.json()
-    assert out["title"] == "Скриншот"
-    r = await c.post(f"/api/assistant/chat/{out['task_id']}/dismiss", json={"chat_id": out["chat_id"]})
-    assert r.status_code == 200, r.text
-    saved = (await c.get(f"/api/assistant/chats/{out['chat_id']}")).json()["messages"]
-    assert saved[0] == {"role": "user", "content": "", "images": 1}
-    assert saved[1]["proposal"]["state"] == "dismissed"
-    assert saved[1]["proposal"]["actions"] == [{"type": "delete_playlist", "playlist_id": "pl1", "name": "Тест"}]
-    r = await c.post(f"/api/assistant/chat/{out['task_id']}/confirm", json={"confirm_token": out["confirm_token"]})
-    assert r.status_code == 409, r.text  # a dismissed proposal can no longer delete anything
-    assert env["state"]["deleted"] == []
+    out = await chat(env, "♥", completion(calls=[tool_call("star", song_ids=["ndA"])]))
+    assert out["done"] == ["♥ поставлено: 1 трек"]

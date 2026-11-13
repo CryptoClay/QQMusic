@@ -24,7 +24,10 @@ WORKDIR /app
 COPY hub/pyproject.toml hub/uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 COPY hub/ ./
-RUN rm -rf /app/.venv /app/data && uv sync --frozen --no-dev
+# Dependencies are already installed above. Uvicorn imports app directly from /app;
+# installing the project again would fetch an unnecessary isolated build backend.
+# .dockerignore excludes host virtual environments and local data.
+RUN python -c "from app.main import app; assert app"
 COPY --from=web /src/hub/app/static /app/app/static
 EXPOSE 8080
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers", "--forwarded-allow-ips", "*", "--no-access-log"]

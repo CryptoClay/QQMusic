@@ -1,10 +1,13 @@
 import { useSyncExternalStore } from 'react';
-import { api, errorMessage, isAbort, listenStreamUrl } from '../api/client';
+import { api, errorMessage, isAbort, listenPreviewUrl, listenStreamUrl, request } from '../api/client';
 import type { LaunchOrigin, ListenOut } from '../api/types';
 import { startDownload } from './actions';
 import { hubEvents } from './events';
+import { toast } from './ui';
 import { NATIVE_PLAYING_EVENT, canPlayAll, pauseNative, webPlayerShown } from './player';
 import { listeningAccount, newEventId, newLaunch, playEvent, routeContext, type Launch } from './plays';
+import { attachEffects, effectsReady, fadeLevel, releaseEffects, resumeEffects } from './audioEffects';
+import { musicSettings } from './music';
 
 /** Listening to catalog tracks before downloading them, in the page itself (one `<audio>`): the Hub picks the
  * file a download would take and streams it (GET /api/listen). Works in a plain browser too. Inside the Android
@@ -300,9 +303,19 @@ function el(): HTMLAudioElement {
   const a = new Audio();
   a.preload = 'auto';
   a.volume = state.volume;
-  const sync = () =>
+  attachEffects(a);
+  const sync = () => {
+    if (audio !== a) return;
     set({ position: pendingSeek || a.currentTime, duration: Number.isFinite(a.duration) && a.duration > 0 ? a.duration : state.duration });
+    const seconds = Math.min(musicSettings().crossfade_s, a.duration * .1);
+    if (!fadingTail && effectsReady(a) && seconds > 0 && !a.paused && state.phase === 'playing' && state.repeat !== 'one' && hasNext(state) && a.duration > 20 && a.duration - a.currentTime <= seconds && a.duration - a.currentTime > .2) {
+      fadingTail = a;
+      audio = null;
+      start(state.queue, state.index + 1, true, 0, true, true);
+    }
+  };
   a.addEventListener('loadedmetadata', () => {
+    if (audio !== a) return;
     if (pendingSeek > 0) {
       a.currentTime = Number.isFinite(a.duration) ? Math.min(pendingSeek, Math.max(0, a.duration - 0.1)) : pendingSeek;
       pendingSeek = 0;
@@ -311,29 +324,40 @@ function el(): HTMLAudioElement {
   });
   a.addEventListener('timeupdate', sync);
   a.addEventListener('durationchange', sync);
-  a.addEventListener('play', pauseNative);
+  a.addEventListener('play', () => { stopPreview(); pauseNative(); });
   a.addEventListener('playing', () => {
+    if (audio !== a) return;
+    if (fadingTail && fadeTimer === undefined) {
+      const seconds = Math.max(0, Math.min(musicSettings().crossfade_s, fadingTail.duration - fadingTail.currentTime || 0));
+      fadeLevel(fadingTail, 0, seconds);
+      fadeLevel(a, 1, seconds);
+      fadeTimer = window.setTimeout(finishFade, seconds * 1000 + 50);
+    }
     set({ phase: 'playing', error: null });
     refreshInfo();
     reportStart();
     if (played?.started && played.anchor === null) played.anchor = performance.now();
   });
-  const suspendClock = () => { if (played?.started) { accrue(played); played.anchor = null; checkpoint(); } };
+  const suspendClock = () => { if (audio === a && played?.started) { accrue(played); played.anchor = null; checkpoint(); } };
   a.addEventListener('seeking', suspendClock);
   a.addEventListener('seeked', () => {
+    if (audio !== a) return;
     if (played?.started && !a.paused && a.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) played.anchor = performance.now();
   });
   a.addEventListener('waiting', () => {
+    if (audio !== a) return;
     suspendClock();
     if (state.phase === 'playing') set({ phase: 'loading' });
   });
   // Pauses from outside (audio focus, lock screen); switching tracks also fires one, during 'resolving'.
   a.addEventListener('pause', () => {
+    if (audio !== a) return;
     suspendClock();
     if (!a.ended && (state.phase === 'playing' || state.phase === 'loading')) set({ phase: 'paused' });
   });
   // the same element plays on: it was unlocked by the first tap, so the next track may start without one
   a.addEventListener('ended', () => {
+    if (audio !== a) return;
     reportEnd(true);
     if (state.repeat === 'one') start(state.queue, state.index, true);
     else if (hasNext(state)) start(state.queue, state.index + 1, true);
@@ -341,6 +365,8 @@ function el(): HTMLAudioElement {
     else set({ phase: 'ended' });
   });
   a.addEventListener('error', () => {
+    if (audio !== a) return;
+    finishFade();
     if (a.getAttribute('src')) { reportEnd(false, true); set({ phase: 'error', error: state.error ?? 'Не удалось воспроизвести' }); }
   });
   // the app's player started: one player on screen, so this one closes (the app shows its own again)
@@ -350,16 +376,27 @@ function el(): HTMLAudioElement {
 }
 
 function play(a: HTMLAudioElement) {
+  resumeEffects();
   // NotAllowedError (no user gesture): wait for the play button; AbortError: a newer track or a pause won.
   a.play().catch((e: unknown) => {
-    if ((e as Error)?.name === 'NotAllowedError') set({ phase: 'paused' });
+    if ((e as Error)?.name === 'NotAllowedError') { finishFade(); set({ phase: 'paused' }); }
   });
 }
 
 /** `auto`: reached by the previous track ending; a track that can't be played is then skipped. */
-function start(queue: readonly ListenTrack[], index: number, auto = false, position = 0, autoplay = true) {
+let fadingTail: HTMLAudioElement | null = null;
+let fadeTimer: number | undefined;
+function finishFade() {
+  window.clearTimeout(fadeTimer); fadeTimer = undefined;
+  if (fadingTail) { fadingTail.pause(); fadingTail.removeAttribute('src'); fadingTail.load(); releaseEffects(fadingTail); fadingTail = null; }
+  if (audio) { fadeLevel(audio, 1); audio.volume = state.volume; }
+}
+function start(queue: readonly ListenTrack[], index: number, auto = false, position = 0, autoplay = true, fading = false) {
+  if (!fading) finishFade();
+  stopPreview();
   const track = queue[index];
   const a = el();
+  if (fading) fadeLevel(a, 0);
   reportEnd();
   // a recommendation of the smart shuffle reports under its session, the playlist's own songs under their list
   played = { ref: track.ref, context: track.rec ? `smart:${track.rec.session}` : listContext, launch: listLaunch, started: false, playbackId: newEventId(), listenedMs: 0, anchor: null, account: listeningAccount() };
@@ -386,6 +423,7 @@ function start(queue: readonly ListenTrack[], index: number, auto = false, posit
       if (isAbort(e) || resolving !== ctl) return;
       if (auto && hasNext(state)) return void start(state.queue, state.index + 1, true);
       set({ phase: 'error', error: errorMessage(e) });
+      finishFade();
       a.pause();
     },
   );
@@ -406,6 +444,11 @@ function refreshInfo() {
 
 /** Asks the Hub to pick the next track's file now (it remembers the pick), so it starts at once. */
 function prefetchNext() {
+  const connection = (navigator as Navigator & {connection?: {saveData?: boolean; effectiveType?: string}}).connection;
+  const enabled = (() => { try { return localStorage.getItem('qqmusic-warm') !== 'off'; } catch { return true; } })();
+  const warm = enabled && !connection?.saveData && !['2g','slow-2g'].includes(connection?.effectiveType ?? '');
+  const refs = warm ? state.queue.slice(state.index + 1, state.index + 3).map((track) => track.ref) : [];
+  void request('POST','/api/listen/prepare',{json:{refs}}).catch(()=>{});
   const nextTrack = state.queue[state.index + 1] ?? (state.repeat === 'all' && !onWave() ? state.queue[0] : undefined);
   if (!nextTrack || prefetching?.ref === nextTrack.ref) return;
   prefetching?.ctl.abort();
@@ -481,8 +524,47 @@ export function touchTrack(ref: string) {
   scheduleSend(true);
 }
 
+let previewAudio: HTMLAudioElement | null = null;
+let previewRef: string | null = null;
+const previewSubscribers = new Set<() => void>();
+const notifyPreview = () => { for (const fn of previewSubscribers) fn(); };
+export function usePreview(ref: string | null | undefined) {
+  return useSyncExternalStore((fn) => { previewSubscribers.add(fn); return () => { previewSubscribers.delete(fn); }; }, () => !!ref && previewRef === ref, () => false);
+}
+export function stopPreview() {
+  if (!previewAudio) return;
+  previewAudio.pause();
+  previewAudio.removeAttribute('src');
+  previewAudio.load();
+  previewAudio = null;
+  previewRef = null;
+  notifyPreview();
+}
+window.addEventListener(NATIVE_PLAYING_EVENT, stopPreview);
+window.addEventListener('pagehide', stopPreview);
+export function playPreview(ref: string) {
+  if (!ref.startsWith('dz:')) return;
+  if (previewRef === ref) return stopPreview();
+  stopPreview();
+  pause();
+  pauseNative();
+  const a = new Audio(listenPreviewUrl(ref));
+  previewAudio = a;
+  previewRef = ref;
+  notifyPreview();
+  const finish = () => { if (previewAudio === a) stopPreview(); };
+  a.addEventListener('ended', finish);
+  a.addEventListener('error', () => {
+    if (previewAudio === a) { finish(); toast('Не удалось воспроизвести превью', 'error'); }
+  });
+  a.play().catch((e: unknown) => {
+    if (previewAudio === a) { finish(); if ((e as Error)?.name !== 'AbortError') toast('Не удалось воспроизвести превью', 'error'); }
+  });
+}
+
 /** Tap on a catalog track: starts it (with `queue`, the list it belongs to, playing on after it), or
  * pauses/resumes it if it is the current one. `origin` — where the list was launched (by default by `context`). */
+
 export function listen(track: ListenTrack, queue?: readonly ListenTrack[], context?: string, origin?: LaunchOrigin) {
   if (state.track?.ref === track.ref && state.phase !== 'error') return toggle();
   startList(track, queue, context, origin);
@@ -813,6 +895,7 @@ function resume() {
 }
 
 export function pause() {
+  finishFade();
   if (!audio || !state.track || state.phase === 'error' || state.phase === 'ended') return;
   audio.pause();
   set({ phase: 'paused' });
@@ -822,11 +905,13 @@ export function setVolume(volume: number) {
   if (!Number.isFinite(volume)) return;
   const value = Math.max(0, Math.min(1, volume));
   if (audio) audio.volume = value;
+  if (fadingTail) fadingTail.volume = value;
   set({ volume: value });
   try { localStorage.setItem(VOLUME_KEY, String(value)); } catch { /* storage is optional */ }
 }
 
 export function seek(seconds: number) {
+  finishFade();
   if (!audio || !Number.isFinite(seconds)) return;
   if (audio.readyState === HTMLMediaElement.HAVE_NOTHING) pendingSeek = Math.max(0, seconds);
   else { pendingSeek = 0; audio.currentTime = seconds; }
@@ -836,6 +921,8 @@ export function seek(seconds: number) {
 
 /** Stops and hides the player. */
 export function stopListening() {
+  finishFade();
+  void request('POST','/api/listen/prepare',{json:{refs:[]}}).catch(()=>{});
   reportEnd();
   resolving?.abort();
   resolving = null;

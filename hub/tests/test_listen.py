@@ -148,7 +148,7 @@ async def test_slow_listen_releases_auth_connection_before_resolving_and_allows_
 
     entered, release = asyncio.Event(), asyncio.Event()
 
-    async def choose(ref):
+    async def choose(ref, *, full_only=False, user=None):
         entered.set()
         await release.wait()
         return Choice(ref=ref, kind="preview", artist="QA", title="Song", duration_s=214)
@@ -447,6 +447,37 @@ async def test_deezer_preview_when_no_source_has_it(env):
     assert svc.deezer.previews >= 1  # a fresh signed link, not the cached catalog one
 
 
+async def test_metadata_full_explicitly_rejects_preview_and_preserves_legacy_default(env):
+    c = env["client"]
+    assert (await c.get("/api/listen", params={"ref": "dz:100"})).json()["kind"] == "preview"
+    r = await c.get("/api/listen", params={"ref": "dz:100", "full": "1"})
+    assert r.status_code == 503
+    env["hm"].cands = [cand("1", "https://cdn.test/good.mp3")]
+    r = await c.get("/api/listen", params={"ref": "dz:100", "full": "1"})
+    assert r.status_code == 200, r.text
+    assert r.json()["kind"] == "full"
+    assert r.json()["stream_url"] == "/api/listen/stream?ref=dz%3A100&full=1"
+
+
+async def test_explicit_preview_is_independent_and_supports_ranges(env):
+    from app import listen
+    c = env["client"]
+    env["hm"].cands = [cand("1", "https://cdn.test/good.mp3")]
+    full = await c.get("/api/listen", params={"ref": "dz:100", "full": "1"})
+    assert full.status_code == 200
+    chosen = listen._choices["dz:100"]
+    r = await c.get("/api/listen/preview", params={"ref": "dz:100"}, headers={"Range": "bytes=100-199"})
+    assert r.status_code == 206 and r.content == AUDIO[100:200]
+    assert r.headers["content-range"] == f"bytes 100-199/{len(AUDIO)}"
+    assert r.headers["X-HomeMusic-Listen-Kind"] == "preview"
+    assert listen._choices["dz:100"] is chosen and not chosen.heard
+    assert env["hm"].searched == 1
+    assert (await c.get("/api/listen/preview", params={"ref": "nd:other"})).status_code == 404
+    from app.services import svc
+    svc.deezer = FakeDeezer(preview=None)
+    assert (await c.get("/api/listen/preview", params={"ref": "dz:100"})).status_code == 404
+
+
 async def test_full_song_request_never_plays_a_preview(env):
     c = env["client"]
     assert (await c.get("/api/listen", params={"ref": "dz:100"})).json()["kind"] == "preview"
@@ -494,6 +525,36 @@ async def test_optional_name_lookup_cannot_delay_playback(env, monkeypatch):
     response = await env["client"].get("/api/listen", params={"ref": "dz:100"})
     assert response.status_code == 200, response.text
     assert response.json()["kind"] == "full" and response.json()["provider"] == "hitmoz"
+
+
+async def test_internet_archive_fallback_and_file_search_stream_ranges(env):
+    from app.providers.internet_archive import InternetArchiveProvider
+    from app.services import svc
+
+    archive = InternetArchiveProvider(client=env['hm'].client)
+    archive.limiter.interval = 0
+    svc.providers['internet_archive'] = archive
+    mock = env['mock']
+    mock.get('https://archive.org/advancedsearch.php').respond(200, json={
+        'response': {'docs': [{'identifier': 'public-audio'}]},
+    })
+    mock.get('https://archive.org/metadata/public-audio').respond(200, json={
+        'metadata': {'mediatype': 'audio', 'creator': 'Кино'},
+        'files': [{'name': 'song.mp3', 'title': 'Группа крови', 'length': '245', 'bitrate': '320'}],
+    })
+    mock.get('https://archive.org/download/public-audio/song.mp3').mock(side_effect=ranged)
+    client = env['client']
+    picked = await client.get('/api/listen', params={'ref': 'dz:100', 'full': '1'})
+    assert picked.status_code == 200, picked.text
+    assert picked.json()['kind'] == 'full' and picked.json()['provider'] == 'internet_archive'
+    files = await client.get('/api/search/providers', params={'q': 'Кино - Группа крови', 'provider': 'internet_archive'})
+    assert files.status_code == 200, files.text
+    candidate = files.json()['candidates'][0]
+    ref = f"file:internet_archive:{candidate['provider_id']}"
+    for track in ['dz:100', ref]:
+        stream = await client.get('/api/listen/stream', params={'ref': track, 'full': '1'},
+                                  headers={'Range': 'bytes=100-199'})
+        assert stream.status_code == 206 and stream.content == AUDIO[100:200]
 
 
 async def test_a_full_request_joining_browser_resolution_does_not_play_the_preview(env, monkeypatch):
@@ -596,10 +657,11 @@ async def test_nothing_to_play(env):
 
 async def test_owned_track_plays_the_library_file(env, monkeypatch):
     from unittest.mock import AsyncMock
-    from app.services import svc
+
     from app.db import session_scope
     from app.matching.normalize import fingerprint
     from app.models import Track
+    from app.services import svc
 
     rel = "Кино/1988 - Группа крови/1-01 - Группа крови.mp3"
     f = env["music"] / "library" / rel
@@ -723,9 +785,11 @@ async def test_file_without_http_audio_plays_from_a_local_copy(env, tmp_path):
     svc.providers["soundcloud"] = sc
     assert [f["provider"] for f in await search_files(c, group=None)] == ["soundcloud"]
 
-    # on screen: the Hub downloads the copy in the background, so a tap plays at once
-    assert (await c.post("/api/listen/prefetch", json={"refs": ["file:soundcloud:5"]})).json()["queued"] == 1
-    await settled(lambda: listen._choices["file:soundcloud:5"].local is not None)
+    # Merely appearing on screen resolves metadata; full downloads require playback
+    # or the separate, budgeted look-ahead queue.
+    assert (await c.post("/api/listen/prefetch", json={"refs": ["file:soundcloud:5"]})).json()["queued"] == 0
+    await settled(lambda: "file:soundcloud:5" in listen._choices)
+    assert listen._choices["file:soundcloud:5"].local is None and sc.fetched == 0
     r = await c.get("/api/listen/stream", params={"ref": "file:soundcloud:5"}, headers={"Range": "bytes=10-19"})
     assert r.status_code == 206 and r.content == AUDIO[10:20]
     assert r.headers["content-type"].startswith("audio/mpeg")
@@ -733,6 +797,61 @@ async def test_file_without_http_audio_plays_from_a_local_copy(env, tmp_path):
     assert r.status_code == 200 and r.content == AUDIO
     assert sc.fetched == 1
     assert len(list((env["music"] / "staging" / listen.LOCAL_DIR).glob("*/*.mp3"))) == 1
+
+
+async def test_queue_lookahead_limits_download_only_provider(env, tmp_path):
+    from app import listen, preparation
+    from app.services import svc
+
+    src = tmp_path / 'audio.mp3'
+    src.write_bytes(AUDIO)
+    class BoundedProvider(FakeProvider):
+        bounded_fetch = True
+        async def fetch(self, c, dest, on_progress=None, max_bytes=None):
+            self.fetch_limits.append(max_bytes)
+            return await super().fetch(c, dest, on_progress=on_progress)
+    sc = BoundedProvider('soundcloud', [cand('5', '', provider='soundcloud')], src=src, streams=False)
+    sc.fetch_limits = []
+    svc.providers['soundcloud'] = sc
+    client = env['client']
+    await search_files(client, group=None)
+    assert (await client.post('/api/listen/prepare', json={'refs':['file:soundcloud:5']})).status_code == 200
+    await settled(lambda: listen._choices.get('file:soundcloud:5') is not None and listen._choices['file:soundcloud:5'].local is not None)
+    assert sc.fetch_limits == [preparation.WARM_BYTES]
+    assert preparation.status('file:soundcloud:5')['stage'] == 'ready'
+
+
+@pytest.mark.parametrize('provider_name', ['ytdlp', 'yt_reupload'])
+async def test_youtube_initial_byte_works_but_playback_403_uses_same_file_download(env, tmp_path, provider_name):
+    from app import listen
+    from app.services import svc
+
+    src = tmp_path / 'same-video.mp3'
+    src.write_bytes(AUDIO)
+    provider = FakeProvider(provider_name, [cand('video', 'https://cdn.test/forbidden.mp3', provider=provider_name)],
+                            src=src, client=env['hm'].client)
+    svc.providers[provider_name] = provider
+
+    def refused_after_probe(request):
+        return ranged(request) if request.headers.get('range') == 'bytes=0-0' else httpx.Response(403)
+
+    env['mock'].get('https://cdn.test/forbidden.mp3').mock(side_effect=refused_after_probe)
+    await search_files(env['client'], group=None)
+    ref = f'file:{provider_name}:video'
+    choice = await listen.choose(ref, full_only=True)
+    assert await listen._opens(choice) and provider.fetched == 0
+    played = await env['client'].get('/api/listen/stream', params={'ref': ref, 'full': 1},
+                                     headers={'Range': 'bytes=0-199'})
+    assert played.status_code == 206 and played.content == AUDIO[:200]
+    assert played.headers['X-HomeMusic-Listen-Kind'] == 'full'
+    assert provider.fetched == 1 and choice.candidate.provider_id == 'video'
+    assert not any(call.request.url.host == 'preview.test' for call in env['mock'].calls)
+    # A seek reuses the prepared audio instead of retrying YouTube or downloading it again.
+    before = len(env['mock'].calls)
+    seeked = await env['client'].get('/api/listen/stream', params={'ref': ref, 'full': 1},
+                                    headers={'Range': 'bytes=1000-1099'})
+    assert seeked.status_code == 206 and seeked.content == AUDIO[1000:1100]
+    assert provider.fetched == 1 and len(env['mock'].calls) == before
 
 
 def test_local_copies_are_pruned(tmp_path, monkeypatch):
@@ -795,3 +914,4 @@ async def test_listen_needs_login(env):
     async with app_client(env["app"], login=None) as anon:
         assert (await anon.get("/api/listen", params={"ref": "dz:100"})).status_code == 401
         assert (await anon.get("/api/listen/stream", params={"ref": "dz:100"})).status_code == 401
+        assert (await anon.get("/api/listen/preview", params={"ref": "dz:100"})).status_code == 401

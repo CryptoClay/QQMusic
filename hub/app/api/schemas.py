@@ -338,6 +338,7 @@ class SearchTracksOut(BaseModel):
 class ProviderSearchOut(BaseModel):
     candidates: list[Candidate] = []
     errors: list[str] = []
+    versions: dict[str, str] = {}  # exact file refs; unknown is never inferred from Explicit
 
 
 # --- downloads -----------------------------------------------------------------------------

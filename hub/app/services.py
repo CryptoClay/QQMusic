@@ -29,6 +29,7 @@ class Services:
         from app.catalog.musicbrainz import MusicBrainzClient
         from app.providers.hitmos_fm import HitmosFmProvider
         from app.providers.hitmoz import HitmozProvider
+        from app.providers.internet_archive import InternetArchiveProvider
         from app.providers.reuploads import SoundcloudProvider, YtReuploadProvider
         from app.providers.ytdlp import YoutubeAccess, YtdlpProvider
 
@@ -41,6 +42,7 @@ class Services:
             "ytdlp": YtdlpProvider(cfg.ytdlp, access=youtube),
             "yt_reupload": YtReuploadProvider(cfg.ytdlp, access=youtube),
             "soundcloud": SoundcloudProvider(cfg.ytdlp),
+            "internet_archive": InternetArchiveProvider(),
         }
         self.deezer = DeezerClient(cfg.catalog)
         self.hitmoz_catalog = HitmozCatalog(hitmoz)

@@ -191,11 +191,11 @@ async def send_email_code(email: str) -> int:
         s.add(row)
         await s.flush()
         row_id = row.id
-    text = (f"Ваш код для регистрации в HomeMusic: {code}\n\n"
+    text = (f"Ваш код для регистрации в QQMusic: {code}\n\n"
             f"Введите его на экране регистрации. Код действует {settings.email_code_minutes} минут.\n"
-            "Если вы не регистрировались в HomeMusic, просто не обращайте внимания на это письмо.\n")
+            "Если вы не регистрировались в QQMusic, просто не обращайте внимания на это письмо.\n")
     try:
-        await mailer.send(email, f"Код HomeMusic: {code}", text)
+        await mailer.send(email, f"Код QQMusic: {code}", text)
     except mailer.MailError as e:
         async with session_scope() as s:  # not sent: asking again right away is fine
             await s.execute(delete(EmailCode).where(EmailCode.id == row_id))

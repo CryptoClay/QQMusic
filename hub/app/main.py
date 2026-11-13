@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 import logging
 from contextlib import asynccontextmanager
 
@@ -19,14 +20,9 @@ log = logging.getLogger("app")
 
 def _import_handlers() -> None:
     # registering job handlers is a side effect of importing these modules
-    import app.imports.core
-    import app.jobs.downloads
-    import app.mixes.core
+    for module in ('app.imports.core', 'app.jobs.downloads', 'app.mixes.core'):
+        importlib.import_module(module)
 
-    try:
-        import app.ai.pipeline  # noqa: F401
-    except ImportError:
-        log.warning("assistant pipeline not available")
 
 
 @asynccontextmanager
@@ -79,6 +75,7 @@ def create_app() -> FastAPI:
         admin,
         auth,
         catalog,
+        cloud_library,
         downloads,
         events,
         imports,
@@ -87,6 +84,8 @@ def create_app() -> FastAPI:
         listen,
         medialib,
         mixes,
+        music,
+        nextcloud,
         playlists,
         plays,
         search,
@@ -96,18 +95,12 @@ def create_app() -> FastAPI:
         wave,
     )
 
-    app = FastAPI(title="HomeMusic Hub", version="0.1.0", lifespan=lifespan, docs_url="/api/docs",
+    app = FastAPI(title="QQMusic Hub", version="0.1.0", lifespan=lifespan, docs_url="/api/docs",
                   openapi_url="/api/openapi.json", redoc_url=None)
     for r in (auth.router, search.router, catalog.router, downloads.router, listen.router, library.router, medialib.router,
               uploads.router, playlists.router, plays.router, mixes.router, wave.router, smart_shuffle.router, imports.router, events.router, system.router, admin.router,
-              insights.router):
+              insights.router, nextcloud.router, cloud_library.router, music.router):
         app.include_router(r)
-    try:
-        from app.api import assistant
-
-        app.include_router(assistant.router)
-    except ImportError:
-        pass
 
     @app.exception_handler(Exception)
     async def unhandled(request: Request, exc: Exception):

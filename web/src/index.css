@@ -8,8 +8,8 @@
   --color-fg: #f2f2f2;
   --color-muted: #a8a8a8;
   --color-dim: #6e6e6e;
-  --color-accent: #1ed760;
-  --color-accent-strong: #1db954;
+  --color-accent: #44dc7d;
+  --color-accent-strong: #20bd5c;
   --color-danger: #f26b63;
   --color-warn: #f2b84b;
   --color-info: #5aa9f0;
@@ -60,6 +60,26 @@
   --skeleton-a: #e4eae2;
   --skeleton-b: #d6ddd4;
 }
+
+/* One QQMusic palette at every browser width; Android supplies its own native theme. */
+  :root:not(.hm-embedded) {
+    --color-bg: #111214;
+    --color-surface: #1b1c1e;
+    --color-raised: #262526;
+    --color-line: #3b3938;
+    --color-fg: #f4f2f0;
+    --color-muted: #b8b4b0;
+    --color-dim: #a29e9a;
+    --color-accent: #ff9349;
+    --color-accent-strong: #f47a2e;
+    --color-hover: #34302e;
+    --color-on-accent: #291406;
+    --skeleton-a: #222123;
+    --skeleton-b: #393432;
+  }
+  :root:not(.hm-embedded) .qq-login {
+    background: radial-gradient(ellipse at 50% 0%, #4b2a1b 0%, #211915 35%, #111214 72%);
+  }
 
 @layer base {
   html {

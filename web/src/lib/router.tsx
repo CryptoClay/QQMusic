@@ -44,6 +44,7 @@ const idx = (): number => {
 
 export function navigate(to: string, opts: { replace?: boolean } = {}) {
   const target = '#' + to;
+  const previousPath = parseHash(window.location.hash).path;
   if (opts.replace) {
     window.history.replaceState({ idx: idx() }, '', target);
   } else if (window.location.hash !== target) {
@@ -52,7 +53,8 @@ export function navigate(to: string, opts: { replace?: boolean } = {}) {
     return;
   }
   window.dispatchEvent(new Event(ROUTE_EVENT));
-  window.scrollTo(0, 0);
+  // Debounced search updates only replace the query: keep the user's scroll position.
+  if (!opts.replace || previousPath !== parseHash(target).path) window.scrollTo(0, 0);
 }
 
 /** Go back if we have in-app history, otherwise to `fallback`. */

@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 import { api, libraryCoverUrl, withQuery } from '../api/client';
 import type { LibAlbumOut, ReleaseType } from '../api/types';
 import { Icon, type IconName } from '../components/Icon';
+import { DesktopLibrary } from '../components/LibraryDesktop';
 import { Button, Cover, Empty, ErrorState, Field, IconButton, SectionTitle, Sheet, SkeletonRows } from '../components/ui';
 import { STANDALONE } from '../lib/embedded';
+import { useDesktop } from '../lib/desktop';
 import { useHubEvent } from '../lib/events';
 import { recordTypeLabel, toIntOrNull, tracksWord } from '../lib/format';
 import { useAsync, useDebounced } from '../lib/hooks';
@@ -18,6 +20,7 @@ export function LibraryPage({ initialQuery }: { initialQuery: string }) {
   const [extra, setExtra] = useState<LibAlbumOut[]>([]);
   const [more, setMore] = useState<{ busy: boolean; done: boolean }>({ busy: false, done: false });
   const [createOpen, setCreateOpen] = useState(false);
+  const desktop = useDesktop();
   const res = useAsync((s) => api.libAlbums(dq, 0, PAGE, s), [dq]);
   // «Перенести музыку» lives here too: the app has no «Ещё»; the banner shows until the first import
   const imports = useAsync((s) => api.imports(s), []);
@@ -41,6 +44,24 @@ export function LibraryPage({ initialQuery }: { initialQuery: string }) {
     setExtra((x) => [...x, ...(next ?? [])]);
     setMore({ busy: false, done: !next || next.length < PAGE });
   };
+
+  if (desktop) {
+    return <DesktopLibrary
+      query={q}
+      onQuery={setQ}
+      searching={!!dq}
+      albums={albums}
+      loading={res.loading}
+      error={res.error}
+      retry={() => res.reload()}
+      offerImport={offerImport}
+      canMore={canMore}
+      moreBusy={more.busy}
+      loadMore={loadMore}
+      onCreate={() => setCreateOpen(true)}
+      createSheet={<CreateAlbumSheet open={createOpen} onClose={() => setCreateOpen(false)} />}
+    />;
+  }
 
   return (
     <div>

@@ -33,6 +33,50 @@ class User(Base):
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
+class NextcloudConnection(Base):
+    __tablename__ = "nextcloud_connections"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    server_url: Mapped[str] = mapped_column(String(2048))
+    username: Mapped[str] = mapped_column(String(255))
+    password_enc: Mapped[str] = mapped_column(Text)
+    folder: Mapped[str] = mapped_column(String(1024), default="Music")
+    revision: Mapped[str] = mapped_column(String(36))
+
+
+class NextcloudPlaylist(Base):
+    __tablename__ = 'nextcloud_playlists'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), index=True)
+    name: Mapped[str] = mapped_column(String(128))
+    scope: Mapped[str] = mapped_column(String(64))
+    items_json: Mapped[list[Any]] = mapped_column(JSON, default=list)
+
+
+class MusicEditorial(Base):
+    """Shared lyrics, exact-file version confirmations and artist/album cards."""
+    __tablename__ = 'music_editorial'
+    key: Mapped[str] = mapped_column(String(256), primary_key=True)
+    data_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    updated_by: Mapped[int | None] = mapped_column(ForeignKey('users.id', ondelete='SET NULL'))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class MusicPrivate(Base):
+    """Owner-only song notes, tags and personal lyrics overrides."""
+    __tablename__ = 'music_private'
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
+    ref: Mapped[str] = mapped_column(String(200), primary_key=True)
+    data_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class MusicPreferences(Base):
+    __tablename__ = 'music_preferences'
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
+    data_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+
 class SearchHistory(Base):
     """The account's recent queries, shared by browsers and the embedded app."""
 

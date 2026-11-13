@@ -3,6 +3,7 @@ import { api, withQuery } from '../api/client';
 import type { DownloadItemOut } from '../api/types';
 import { CandidateRow } from '../components/candidate';
 import { Icon } from '../components/Icon';
+import { SourceProblem } from '../components/SourceProblem';
 import { Button, ErrorState, Field, Loading, Notice, PageHeader, ProgressBar, SectionTitle, StatusChip } from '../components/ui';
 import { useHubEvent } from '../lib/events';
 import { DOWNLOAD_ACTIVE, fmtWhen, providerLabel, warningText } from '../lib/format';
@@ -73,7 +74,9 @@ export function DownloadDetailPage({ id }: { id: number }) {
           <div className="text-sm text-muted">
             {[item.artist, item.album].filter(Boolean).join(' · ')}
           </div>
-          {item.error && <Notice kind="error">{item.error}</Notice>}
+          {item.error && <SourceProblem detail={item.error} busy={busy === 'retry'}
+            onRetry={!active ? () => void run('retry', () => api.retry(item.id)) : undefined}
+            onChoose={() => { window.location.hash = '#' + withQuery('/search', { q: `${item.artist} - ${item.title}`, tab: 'files' }); }} />}
           {(item.warnings ?? []).map((w, i) => (
             <Notice key={i}>{warningText(w)}</Notice>
           ))}

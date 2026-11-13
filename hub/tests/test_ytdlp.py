@@ -2,8 +2,11 @@ import asyncio
 import json
 import os
 import shutil
+import threading
+import time
 from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import httpx
@@ -27,6 +30,32 @@ from app.providers.ytdlp import (
 )
 
 NETWORK = os.environ.get("HUB_NETWORK_TESTS") == "1"
+
+
+async def test_first_concurrent_workers_do_not_register_plugins_twice(monkeypatch):
+    # Reproduce yt-dlp's lazy global plugin loader without importing plugins or using the network.
+    namespace = ytdlp_mod.yt_dlp.YoutubeDL.__init__.__globals__
+    loaded = SimpleNamespace(value=False)
+    calls = []
+
+    def load():
+        calls.append(True)
+        time.sleep(0.05)  # another constructor would enter before the flag is set
+        loaded.value = True
+
+    monkeypatch.setitem(namespace, 'all_plugins_loaded', loaded)
+    monkeypatch.setitem(namespace, 'load_all_plugins', load)
+    monkeypatch.delenv('YTDLP_COOKIES_FILE', raising=False)
+    start = threading.Barrier(4)
+
+    def worker():
+        provider = YtdlpProvider(YtdlpCfg())
+        start.wait(timeout=5)
+        with provider._youtube_dl({}):
+            pass
+
+    await asyncio.gather(*(asyncio.to_thread(worker) for _ in range(4)))
+    assert len(calls) == 1
 
 FLAT_TOPIC = {
     "_type": "url", "ie_key": "Youtube", "id": "abc123def45", "url": "https://www.youtube.com/watch?v=abc123def45",
@@ -511,6 +540,26 @@ class FakeYDL:
         return {"id": vid, "requested_downloads": [{"filepath": str(out)}]}
 
 
+@pytest.mark.parametrize('background', [True, False])
+async def test_fetch_byte_limit_only_applies_to_background(monkeypatch, tmp_path, background):
+    from yt_dlp.utils import DownloadCancelled
+
+    from app.net import Priority, priority_context
+
+    monkeypatch.setattr(ytdlp_mod.yt_dlp, 'YoutubeDL', FakeYDL)
+    provider = YtdlpProvider(YtdlpCfg())
+    candidate = entry_to_candidate(FLAT_TOPIC)
+    task = asyncio.create_task(provider.fetch(candidate, tmp_path, max_bytes=40),
+                               context=priority_context(Priority(background)))
+    if background:
+        with pytest.raises(DownloadCancelled, match='лимит предварительной'):
+            await task
+        assert not list(tmp_path.glob('*.opus'))
+    else:
+        assert (await task).is_file()
+    await provider.aclose()
+
+
 @pytest.mark.parametrize("sync_cb", [True, False])
 async def test_fetch_with_fake_ydl(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, sync_cb: bool) -> None:
     monkeypatch.setattr(ytdlp_mod.yt_dlp, "YoutubeDL", FakeYDL)
@@ -544,6 +593,51 @@ async def test_fetch_mp3_mode(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     assert FakeYDL.last_opts["postprocessors"][0]["preferredcodec"] == "mp3"
     assert FakeYDL.last_opts["postprocessors"][0]["preferredquality"] == "320"
     await p.aclose()
+
+
+@pytest.mark.parametrize('provider_name', ['ytdlp', 'yt_reupload'])
+async def test_fetch_media_403_reextracts_same_video_with_alternate_client(monkeypatch, tmp_path, provider_name):
+    from app.providers.reuploads import YtReuploadProvider
+
+    clients, videos = [], []
+
+    class RefusedMedia(FakeYDL):
+        def extract_info(self, url, **kwargs):
+            videos.append(url)
+            return super().extract_info(url, **kwargs)
+
+        def process_ie_result(self, info, download=False):
+            client = self.opts['extractor_args']['youtube']['player_client']
+            clients.append(client)
+            if client == ['mweb']:
+                raise DownloadError('ERROR: unable to download video data: HTTP Error 403: Forbidden')
+            return super().process_ie_result(info, download=download)
+
+    monkeypatch.setattr(ytdlp_mod.yt_dlp, 'YoutubeDL', RefusedMedia)
+    provider = (YtReuploadProvider if provider_name == 'yt_reupload' else YtdlpProvider)(YtdlpCfg())
+    candidate = entry_to_candidate(FLAT_TOPIC).model_copy(update={'provider': provider_name})
+    path = await provider.fetch(candidate, tmp_path)
+    assert path.read_bytes() == b'OggS fake'
+    assert clients == [['mweb'], ['web_safari']]
+    assert videos == [candidate.page_url, candidate.page_url]
+
+
+@pytest.mark.parametrize('error', [
+    'ERROR: unable to download video data: HTTP Error 500: Server Error',
+    'ERROR: unable to download webpage: HTTP Error 403: Forbidden',
+])
+async def test_fetch_does_not_switch_clients_for_unrelated_errors(monkeypatch, tmp_path, error):
+    attempts = []
+
+    class RefusedMedia(FakeYDL):
+        def process_ie_result(self, info, download=False):
+            attempts.append(True)
+            raise DownloadError(error)
+
+    monkeypatch.setattr(ytdlp_mod.yt_dlp, 'YoutubeDL', RefusedMedia)
+    with pytest.raises(ProviderError):
+        await YtdlpProvider(YtdlpCfg()).fetch(entry_to_candidate(FLAT_TOPIC), tmp_path)
+    assert len(attempts) == 1
 
 
 GV = "https://rr7---sn-isp1.googlevideo.com/videoplayback?expire=1&mn=sn-isp1%2Csn-far2&mm=31%2C29&fvip=1&sig=x"

@@ -5,11 +5,14 @@ import type { MeOut } from './api/types';
 import { MiniPlayer, PlayerSpacer } from './components/MiniPlayer';
 import { Overlays } from './components/Overlays';
 import { TabBar, type Tab } from './components/TabBar';
+import { DesktopShell } from './components/DesktopShell';
+import { useDesktop } from './lib/desktop';
 import { ErrorState, Spinner, cx } from './components/ui';
 import { STANDALONE } from './lib/embedded';
 import { hubEvents } from './lib/events';
 import { restoreListening, stopListening } from './lib/listen';
 import { restoreWave } from './lib/wave';
+import { restoreMusic } from './lib/music';
 import { resetStars } from './lib/stars';
 import { startNotificationWatcher, stopNotificationWatcher } from './lib/notify';
 import { SessionContext } from './lib/session';
@@ -22,8 +25,6 @@ import { MixDetailPage, WaveDetailPage } from './pages/insights/Recs';
 import { TrackWeightPage } from './pages/insights/Track';
 import { AlbumPage } from './pages/Album';
 import { ArtistPage } from './pages/Artist';
-import { AssistantChatsPage, AssistantPage } from './pages/Assistant';
-import { AssistantTaskPage } from './pages/AssistantTask';
 import { DownloadDetailPage } from './pages/DownloadDetail';
 import { DownloadsPage } from './pages/Downloads';
 import { HomePage } from './pages/Home';
@@ -34,6 +35,9 @@ import { LoginPage } from './pages/Login';
 import { ArtistsPage, LikedPage, NdAlbumPage, NdAlbumsPage, NdArtistPage, PlaylistPage } from './pages/MediaLibrary';
 import { MixPage, TastePage } from './pages/Mix';
 import { MorePage } from './pages/More';
+import { MusicSettingsPage, NotesPage, RecapPage, TrackDetailsPage } from './pages/Music';
+import { NextcloudPage } from './pages/Nextcloud';
+import { SourcesPage } from './pages/Sources';
 import { PlayerPage } from './pages/Player';
 import { PlaylistsPage } from './pages/Playlists';
 import { SearchPage, searchTab } from './pages/Search';
@@ -69,9 +73,6 @@ const ROUTES: RouteDef[] = [
   ['/downloads/:id', 'downloads', (p) => <DownloadDetailPage key={p.id} id={Number(p.id)} />],
   ['/library', 'library', (_, r) => <LibraryPage initialQuery={r.query.get('q') ?? ''} />],
   ['/library/album/:id', 'library', (p) => <LibraryAlbumPage key={p.id} id={Number(p.id)} />],
-  ['/assistant', 'assistant', (_, r) => <AssistantPage chatId={Number(r.query.get('chat')) || null} />],
-  ['/assistant/chats', 'assistant', () => <AssistantChatsPage />],
-  ['/assistant/:id', 'assistant', (p) => <AssistantTaskPage key={p.id} id={Number(p.id)} />],
   ['/upload', 'more', () => <UploadPage />],
   ['/playlists', STANDALONE ? 'library' : 'more', () => <PlaylistsPage />],
   ['/import', 'more', () => <ImportsPage />],
@@ -90,6 +91,12 @@ const ROUTES: RouteDef[] = [
     ),
   ],
   ['/more', 'more', () => <MorePage />],
+  ['/music-settings', 'more', () => <MusicSettingsPage />],
+  ['/notes', 'library', () => <NotesPage />],
+  ['/recap', 'more', () => <RecapPage />],
+  ['/track/:ref', 'library', (p,r) => <TrackDetailsPage key={p.ref} refId={p.ref} title={r.query.get('title')??''} artist={r.query.get('artist')??''} />],
+  ['/nextcloud', 'library', () => <NextcloudPage />],
+  ['/sources', 'more', () => <SourcesPage />],
   ['/admin', 'more', () => <AdminPage />],
   ['/admin/user/:id', 'more', (p) => <AdminUserPage key={p.id} id={Number(p.id)} />],
   ['/admin/insights', 'more', () => <InsightsOverviewPage />],
@@ -114,6 +121,19 @@ export function App() {
   const [me, setMe] = useState<MeOut | null | undefined>(undefined);
   const [bootError, setBootError] = useState<string>();
   const route = useRoute();
+  const desktop = useDesktop();
+  const desktopShell = desktop && !!me && route.path !== '/player';
+
+  useEffect(() => {
+    if (!desktopShell) return;
+    const root = document.documentElement;
+    const previous = root.style.getPropertyValue('--tabbar-h');
+    root.style.setProperty('--tabbar-h', '0px');
+    return () => {
+      if (previous) root.style.setProperty('--tabbar-h', previous);
+      else root.style.removeProperty('--tabbar-h');
+    };
+  }, [desktopShell]);
 
   const boot = useCallback(() => {
     setBootError(undefined);
@@ -131,6 +151,7 @@ export function App() {
   useEffect(() => {
     const account = me?.id ?? null;
     setListeningAccount(account);
+    restoreMusic(account);
     restoreListening(account);
     restoreWave(account);
   }, [me]);
@@ -206,14 +227,20 @@ export function App() {
   const wide = route.path.startsWith('/admin/');
   return (
     <SessionContext.Provider value={{ me, logout }}>
-      <main className={cx('mx-auto min-h-dvh', wide ? 'max-w-6xl' : 'max-w-2xl', !fullPlayer && 'pb-[calc(var(--tabbar-h)+16px+env(safe-area-inset-bottom))]')}>
-        {resolved?.node}
-        {!fullPlayer && <PlayerSpacer />}
-      </main>
+      {desktopShell ? (
+        <DesktopShell me={me} active={resolved?.tab ?? null}>
+          <main id="desktop-main" tabIndex={-1} className={cx('mx-auto min-h-dvh w-full px-4 pb-8', wide ? 'max-w-[1480px]' : 'max-w-[1280px]')}>{resolved?.node}<PlayerSpacer /></main>
+        </DesktopShell>
+      ) : (
+        <main className={cx('mx-auto min-h-dvh', wide ? 'max-w-6xl' : 'max-w-2xl', !fullPlayer && 'pb-[calc(var(--tabbar-h)+16px+env(safe-area-inset-bottom))]')}>
+          {resolved?.node}
+          {!fullPlayer && <PlayerSpacer />}
+        </main>
+      )}
       {!fullPlayer && (
         <>
           <MiniPlayer />
-          <TabBar active={resolved?.tab ?? null} last={lastByTab} />
+          {!desktopShell && <TabBar active={resolved?.tab ?? null} last={lastByTab} />}
         </>
       )}
       <Overlays />

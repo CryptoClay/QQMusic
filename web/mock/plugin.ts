@@ -9,6 +9,13 @@ type Json = Record<string, unknown>;
 
 const now = () => new Date().toISOString();
 let searchHistory: string[] = [];
+let privateCloud: { server_url: string; username: string; folder: string } | null = null;
+const cloudDemo = {id: 'mock-private-track', artist: 'Кино', title: 'Группа крови'};
+let cloudPlaylists: {id: number; name: string; available: boolean; files: typeof cloudDemo[]}[] = [];
+let musicPrefs={prefer_original:false,radio_mode:'normal',eq_enabled:false,eq_gains:[0,0,0,0,0,0],normalization:false,crossfade_s:0};
+const personalMusic=new Map<string,Json>();
+const sharedMusic=new Map<string,Json>();
+const musicVersions=new Map<string,Json>();
 // `size` only shows in the address (the real Hub has 1000 px and 250 px covers): lists must ask for the small one
 const cover = (seed: string, size = 1000) => `/mock-cover/${encodeURIComponent(seed)}.svg?size=${size}`;
 
@@ -953,6 +960,52 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<boolea
     return send(res, 200, { id: 5, username: String(b.username), is_admin: false, public_music_url: 'https://203.0.113.10:8444' }), true;
   }
   if (!authed) return send(res, 401, { detail: 'Требуется вход' }), true;
+  if(p==='/api/music/preferences'){if(m==='PUT')musicPrefs={...musicPrefs,...await readJson(req)};return send(res,200,musicPrefs),true;}
+  if(p==='/api/music/track'){
+    const ref=url.searchParams.get('ref')??'';const vref=url.searchParams.get('played_ref')??ref;const personal=personalMusic.get(ref)??{};const shared=sharedMusic.get('track:'+ref)??{};
+    const own=!!(personal.plain_lyrics||personal.synced_lyrics);
+    return send(res,200,{ref,personal,shared,version_ref:vref,can_confirm_version:vref.startsWith('file:')||vref.startsWith('nd:'),version:musicVersions.get(vref)??{status:'unknown'},lyrics:{plain:(own?personal:shared).plain_lyrics??'',synced:(own?personal:shared).synced_lyrics??'',source:own?(personal.lyrics_source||'Личный текст'):shared.source??''}}),true;
+  }
+  if(p==='/api/music/personal'){personalMusic.set(url.searchParams.get('ref')??'',await readJson(req));return send(res,200,{ok:true}),true;}
+  if(p==='/api/music/lyrics'){sharedMusic.set('track:'+(url.searchParams.get('ref')??''),await readJson(req));return send(res,200,{ok:true}),true;}
+  if(p==='/api/music/version'){const body=await readJson(req);musicVersions.set(String(body.ref),body);return send(res,200,{ok:true}),true;}
+  if(p==='/api/music/lyrics/find')return send(res,200,{found:true,plain_lyrics:'Пробная строка для проверки плеера\nСледующая строка',synced_lyrics:'[00:00.00]Пробная строка для проверки плеера\n[00:03.00]Следующая строка',source:'https://lrclib.net'}),true;
+  if(p==='/api/music/notes'){const q=(url.searchParams.get('q')??'').toLowerCase();const tag=url.searchParams.get('tag')??'';return send(res,200,[...personalMusic].map(([ref,value])=>({ref,...value})).filter((item)=>JSON.stringify(item).toLowerCase().includes(q) && (!tag || ((item as Json).tags as string[]|undefined)?.includes(tag)))),true;}
+  if(p.startsWith('/api/music/profile/')){const key=p.split('/').at(-1)+':'+url.searchParams.get('ref');if(m==='PUT')sharedMusic.set(key,await readJson(req));return send(res,200,sharedMusic.get(key)??{}),true;}
+  if(p==='/api/music/recap')return send(res,200,{totals:{counted_listens:42,listened_ms:7200000,new_tracks:8,unique_artists:12},top_tracks:[{key:'dz:1',ref:'dz:1',artist:'Тестовый исполнитель',title:'Демонстрационный трек',heard:7}],top_artists:[{artist:'Тестовый исполнитель',heard:12}],discoveries:[],forgotten:[]}),true;
+  if (p === '/api/listen/status') return send(res, 200, {stage:'ready',progress:1}), true;
+  if (p === '/api/listen/prepare') return send(res, 200, {queued: ((await readJson(req)).refs as string[]).length}), true;
+  if (p === '/api/system/sources' || p === '/api/system/sources/check') return send(res, 200, {cookies_configured:true,sources:['hitmoz','yt_reupload','soundcloud','internet_archive'].map((name)=>({name,cooldown_s:0,search:{ok:true,at:now(),reason:null},audio: name === 'yt_reupload' ? {ok:false,at:now(),reason:'forbidden'} : undefined}))}), true;
+  if (p === '/api/downloads/retry-batch') {
+    const ids = (await readJson(req)).ids as number[]; let queued = 0;
+    downloads.forEach((item)=>{if(ids.includes(item.id) && ['failed','needs_review'].includes(item.status)){item.status='queued';item.error=null;queued++;}});
+    return send(res,200,{queued}),true;
+  }
+  if (/^\/api\/downloads\/items\/\d+\/priority$/.test(p)) return send(res,200,{updated:1}),true;
+  if (p === '/api/nextcloud/browse') return send(res,200,{files:[cloudDemo],folders:url.searchParams.has('folder') ? [] : [{id:'mock-folder',name:'Рок'}]}),true;
+  if (p === '/api/nextcloud/metadata') return send(res,200,{artist:'Кино',title:'Группа крови',album:'Группа крови',cover_url:cover('kino')}),true;
+  if (p === '/api/nextcloud/playlists') {
+    if(m === 'POST'){const body=await readJson(req);const item={id:Date.now(),name:String(body.name),available:true,files:[]};cloudPlaylists.push(item);return send(res,200,{id:item.id}),true;}
+    return send(res,200,cloudPlaylists),true;
+  }
+  const cloudList = p.match(/^\/api\/nextcloud\/playlists\/(\d+)(\/items)?$/);
+  if(cloudList){const id=Number(cloudList[1]); if(m==='DELETE')cloudPlaylists=cloudPlaylists.filter((item)=>item.id!==id);else cloudPlaylists.find((item)=>item.id===id)?.files.push(cloudDemo);return send(res,200,{ok:true}),true;}
+  if (p === '/api/nextcloud/connection') {
+    if (m === 'PUT') {
+      const b = await readJson(req);
+      privateCloud = { server_url: String(b.server_url), username: String(b.username), folder: String(b.folder) };
+      return send(res, 200, { ok: true }), true;
+    }
+    if (m === 'DELETE') { privateCloud = null; return send(res, 200, { ok: true }), true; }
+    return send(res, 200, { connected: !!privateCloud, server_url: '', username: '', folder: 'Music',
+      ...privateCloud, has_password: !!privateCloud, allowed_servers: [], can_add_server: true }), true;
+  }
+  if (p === '/api/nextcloud/test') return send(res, 200, { ok: true }), true;
+  if (p === '/api/nextcloud/files') return send(res, 200, { files: [{ id: 'mock-private-track', artist: 'Кино', title: 'Группа крови' }] }), true;
+  if (p === '/api/nextcloud/audio') {
+    if (url.searchParams.get('download')) res.setHeader('Content-Disposition', 'attachment; filename="nextcloud-demo.wav"');
+    return sendRange(req, res, wav(10, 'nextcloud-demo'), 'audio/wav'), true;
+  }
 
   // Deterministic QA controls; these routes exist only in the dev mock.
   if (p === '/api/mock/favorites') {
@@ -1081,7 +1134,7 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<boolea
     if (group === 'reuploads') await delay(1500); // SoundCloud is slow
     const reuploads = group === 'sources' ? [] : [0, 1, 2].map((i) => reuploadCand('Три дня дождя', title, i));
     for (const c of [...sources, ...reuploads]) shownFiles.set(`file:${c.provider}:${c.provider_id}`, c);
-    return send(res, 200, { candidates: [...sources, ...reuploads], errors: [] }), true;
+    return send(res, 200, { candidates: [...sources, ...reuploads], errors: [],versions:Object.fromEntries([...musicVersions].map(([ref,value])=>[ref,value.status])) }), true;
   }
 
   // catalog

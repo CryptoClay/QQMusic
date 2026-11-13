@@ -18,8 +18,8 @@ class SourcesCfg(BaseModel):
     ru: list[str] = ["hitmoz", "hitmos_fm", "soundcloud", "yt_reupload", "ytdlp"]
     # hitmoz first: a YouTube file opens only after the ad before the video (`ytdlp.MAX_AD_WAIT_S`)
     default: list[str] = ["hitmoz", "ytdlp"]
-    # Tried only by downloads, after regular sources fail; never part of page prefetch.
-    download_fallback: list[str] = ["soundcloud"]
+    # Full-file fallback for listening and downloads after regular sources fail.
+    download_fallback: list[str] = ["soundcloud", "internet_archive"]
     # re-uploads by small channels: an explicit Russian track takes one when no copy above is known to be uncensored
     reuploads: list[str] = ["yt_reupload", "soundcloud"]
     # a source's files uploaded on or after the date are not taken by listening and downloads (the Files tab shows them)
@@ -192,6 +192,12 @@ class Settings(BaseSettings):
     wave_wait_s: float = 8
     # local time of the users (the hour a mix is built at); the container itself runs in UTC
     timezone: str = "Europe/Moscow"
+
+    # Trusted Nextcloud server for personal connections; credentials below are for the standalone checker.
+    nextcloud_url: str = ""
+    nextcloud_user: str = ""
+    nextcloud_password: str = Field(default="", repr=False)
+    nextcloud_folder: str = ""
 
     outbound_proxy: str = ""
     outbound_proxy_hosts: str = ""

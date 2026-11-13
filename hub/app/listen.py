@@ -61,8 +61,8 @@ from app.jobs.downloads import (
     search_provider,
 )
 from app.library.owned import find_existing
-from app.models import Track
 from app.matching.select import rank_candidates
+from app.models import Track
 from app.net import Priority, in_background, make_client, priority_context
 from app.providers.base import FILE_REF, Candidate, StreamSource, TrackQuery, file_ref
 from app.services import svc
@@ -107,6 +107,10 @@ class ListenError(Exception):
         self.status = status
 
 
+class _DownloadRequired(ListenError):
+    """YouTube metadata/initial bytes work, but the direct media transfer is forbidden."""
+
+
 @dataclass
 class Choice:
     ref: str
@@ -147,6 +151,7 @@ class _Copy:
     prio: Priority  # background: loaded ahead; it yields to copies of played tracks
     media_type: str = "audio/mpeg"
     size: int | None = None  # from the first upstream response
+    byte_limit: int | None = None
     have: int = 0  # bytes on disk
     done: bool = False
     failed: ListenError | None = None
@@ -184,6 +189,7 @@ class Media:
 _choices: dict[str, Choice] = {}
 _inflight: dict[str, _Job] = {}
 _fetching: dict[str, _Job] = {}  # ref -> download of a local copy (`_predownload`)
+_local_progress: dict[str, float] = {}
 _copies: dict[str, _Copy] = {}  # ref -> server copy of its picked file
 _calm: asyncio.Event | None = None  # set while no copy of a played track downloads (`_stir`)
 _missed: dict[str, float] = {}  # ref -> monotonic time until which the prefetch skips it
@@ -196,6 +202,26 @@ _http: httpx.AsyncClient | None = None  # Deezer preview CDN
 # leaves its unread data counted against the connection window, and after a couple of them the next stream gets
 # headers but no data (seen with the hitmoz CDN).
 _media: httpx.AsyncClient | None = None
+
+
+async def choose_preview(ref: str) -> Choice:
+    """Resolve the explicitly requested catalog preview, independently of full-track choices."""
+    try:
+        src, track_id = split_ref(ref)
+    except ValueError as e:
+        raise ListenError(400, "Неверная ссылка на трек") from e
+    if src != "dz" or svc.deezer is None:
+        raise ListenError(404, "Превью недоступно")
+    try:
+        track = await svc.deezer.get_track(track_id)
+    except CatalogNotFound as e:
+        raise ListenError(404, "Трек не найден в каталоге") from e
+    except Exception as e:
+        raise ListenError(502, f"Каталог недоступен: {e}") from e
+    if not track.preview_url:
+        raise ListenError(404, "Превью недоступно")
+    q = query_from_track(track)
+    return Choice(ref, "preview", q.artist, q.title, PREVIEW_S)
 
 
 async def choose(ref: str, *, background: bool = False, stale: Choice | None = None, full_only: bool = False) -> Choice:
@@ -262,6 +288,14 @@ async def open_media(ref: str, range_header: str | None, *, ahead: bool = False,
             return _variant(c, known)
         cp = _server_copy(c, background=ahead)
         await cp.until(lambda cp=cp: cp.size is not None or cp.settled())
+        if isinstance(cp.failed, _DownloadRequired) and not cp.have:
+            # No upstream bytes reached the player, so it is safe to switch containers.
+            # fetch() can recover the same video with web_safari/HLS and extract its audio.
+            await _predownload(c)
+            _heard(c)
+            assert c.local is not None
+            media = Media(c, path=c.local, media_type=local_media_type(c.local))
+            return await _lighten(c, media, c.local, _file_ident(c), ahead) if lite else media
         if cp.failed is None or cp.have:
             _heard(c)
             variant = known[1] if known else light.PENDING
@@ -439,6 +473,7 @@ async def open_stream(choice: Choice, range_header: str | None) -> tuple[httpx.R
     last = ""
     while True:
         cand = choice.candidate
+        forbidden = False
         for _ in range(2):
             try:
                 src = choice.source or await _upstream(choice)
@@ -466,9 +501,12 @@ async def open_stream(choice: Choice, range_header: str | None) -> tuple[httpx.R
                 choice.source = replace(src, url=str(resp.url))  # later Range requests skip the redirects
                 return resp, src
             last = f"HTTP {resp.status_code} {ctype}".strip()
+            forbidden = forbidden or resp.status_code == 403
             await resp.aclose()
             choice.source = None
         if choice.candidate is cand:  # (a concurrent request may have moved on already)
+            if forbidden and cand and cand.provider in {"ytdlp", "yt_reupload"}:
+                raise _DownloadRequired(502, "YouTube не отдаёт прямой поток; нужна подготовка аудиофайла")
             if choice.kind != "full" or not choice.alternates:
                 raise ListenError(502, f"Источник не отдаёт файл ({last})")
             log.info("listen %s: %s does not open (%s), next file", choice.ref, cand.page_url if cand else "", last)
@@ -512,7 +550,7 @@ def _ready(ref: str) -> bool:
         return True
     hit = _choices.get(ref)
     return bool(hit and hit.fresh() and _usable(hit)
-                and (hit.kind != "full" or hit.source is not None or hit.local is not None))
+                and (hit.kind != "full" or hit.source is not None or hit.local is not None or _downloads_only(hit)))
 
 
 def _next_wanted() -> str | None:
@@ -559,6 +597,9 @@ async def _warm(ref: str) -> None:
 async def reset() -> None:
     """Forget picks in memory, stop the prefetch and server copies, close the clients (app shutdown, tests)."""
     global _http, _media, _wake, _calm
+    from app import preparation
+    preparation.reset()
+    _local_progress.clear()
     tasks = set([*_workers, *_tasks, *(j.task for j in [*_inflight.values(), *_fetching.values()])])
     for t in tasks:
         t.cancel()
@@ -613,7 +654,7 @@ async def _resolve(ref: str, *, probe: bool, remembered: bool, full_only: bool =
         return await _resolve_file(ref, probe=probe, remembered=remembered)
     if src == "nd":
         return await _resolve_song(ref, id_)
-    if not (src == "dz" and svc.deezer is not None or src == "hm" and "hitmoz" in svc.providers):
+    if not ((src == "dz" and svc.deezer is not None) or (src == "hm" and "hitmoz" in svc.providers)):
         raise ListenError(400, "Этот трек нельзя послушать")
     choice = await _remembered(ref) if remembered else None
     if choice is not None and full_only and choice.kind == "preview":
@@ -806,6 +847,10 @@ async def _opens(choice: Choice) -> bool:
     """Ask the upstream for one byte: a dead link or an HTML page instead of audio moves on to the next file. A
     source without plain HTTP audio: download the copy that will play."""
     if _downloads_only(choice):
+        if in_background():
+            # Screen metadata must not trigger unbounded full downloads. Queue look-ahead
+            # owns the byte budget and explicitly calls _predownload after checking it.
+            return True
         try:
             await _predownload(choice)
         except Exception as e:
@@ -849,11 +894,13 @@ async def _upstream(choice: Choice) -> StreamSource:
 
 
 def _downloads_only(c: Choice) -> bool:
+    if c.local is not None and c.local.is_file():
+        return True
     provider = svc.providers.get(c.candidate.provider) if c.kind == "full" and c.candidate else None
     return provider is not None and not getattr(provider, "streams", True)
 
 
-async def _predownload(c: Choice) -> Path:
+async def _predownload(c: Choice, *, max_bytes: int | None = None) -> Path:
     """The local copy of the file (downloaded now, or already). Concurrent callers share one download; a user
     request joining a background one lifts it."""
     if c.local is not None and c.local.is_file():
@@ -863,7 +910,7 @@ async def _predownload(c: Choice) -> Path:
     if job is None:
         assert c.candidate is not None
         prio = Priority(in_background())
-        job = _Job(asyncio.create_task(_fetch_local(c.ref, c.candidate), context=priority_context(prio)), prio)
+        job = _Job(asyncio.create_task(_fetch_local(c.ref, c.candidate, max_bytes=max_bytes), context=priority_context(prio)), prio)
         _fetching[c.ref] = job
 
         def done(t: asyncio.Task, _ref: str = c.ref) -> None:
@@ -878,7 +925,7 @@ async def _predownload(c: Choice) -> Path:
     return c.local
 
 
-async def _fetch_local(ref: str, cand: Candidate) -> Path:
+async def _fetch_local(ref: str, cand: Candidate, *, max_bytes: int | None = None) -> Path:
     provider = svc.providers.get(cand.provider)
     if provider is None:
         raise ListenError(404, "Источник отключён")
@@ -888,10 +935,21 @@ async def _fetch_local(ref: str, cand: Candidate) -> Path:
     dest = root / _local_name(ref)
     try:
         await asyncio.to_thread(dest.mkdir, parents=True, exist_ok=True)
-        path = await provider.fetch(cand, dest)
+        _local_progress[ref] = 0
+        def progress(value):
+            _local_progress[ref] = value
+        options = {"max_bytes": max_bytes} if max_bytes is not None else {}
+        path = await provider.fetch(cand, dest, on_progress=progress, **options)
+        from app.source_status import record
+        record(cand.provider, 'audio', True)
     except Exception as e:
+        from app.source_status import record
+        if 'лимит предварительной загрузки' not in str(e):
+            record(cand.provider, 'audio', False, str(e))
         await asyncio.to_thread(shutil.rmtree, dest, True)
         raise ListenError(502, f"{cand.provider}: {e}") from e
+    finally:
+        _local_progress.pop(ref, None)
     log.info("listen %s: local copy %s (%.1f s)", ref, path.name, time.monotonic() - t0)
     return path
 
@@ -936,6 +994,7 @@ def _server_copy(c: Choice, *, background: bool) -> _Copy:
             not cp.done or cp.path.is_file()):
         if not background:
             cp.prio.foreground()
+            cp.byte_limit = None
             _stir()
         return cp
     if cp is not None and cp.task is not None:
@@ -1013,6 +1072,8 @@ async def _download_copy(c: Choice, cp: _Copy) -> None:
                     await cp.changed()
                 async for chunk in resp.aiter_raw():
                     await _yield_to_played(cp)
+                    if cp.byte_limit and cp.prio.background and cp.have + len(chunk) > cp.byte_limit:
+                        raise ListenError(413, "Превышен лимит предварительной загрузки")
                     await asyncio.to_thread(_write_all, f, chunk)
                     cp.have += len(chunk)
                     drops = 0
@@ -1030,11 +1091,18 @@ async def _download_copy(c: Choice, cp: _Copy) -> None:
                 cp.done = True
         log.info("listen %s: server copy %d KB (%.1f s%s)", c.ref, cp.have // 1024, time.monotonic() - t0,
                  ", ahead" if cp.prio.background else "")
+        from app.source_status import record
+        record(cp.cand.provider, 'audio', True)
     except ListenError as e:
         cp.failed = e
+        if e.status != 413:
+            from app.source_status import record
+            record(cp.cand.provider, 'audio', False, str(e))
     except Exception as e:
         log.warning("listen %s: server copy failed: %r", c.ref, e)
         cp.failed = ListenError(502, f"Не удалось скачать файл: {e}")
+        from app.source_status import record
+        record(cp.cand.provider, 'audio', False, str(e))
     finally:
         if f is not None:
             f.close()

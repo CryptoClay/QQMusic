@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Icon } from '../components/Icon';
 import { LikeButton } from '../components/LikeButton';
+import { usePreparation } from '../components/Preparation';
+import { MusicTrack } from '../components/MusicTrack';
+import { useMusicSettings, type RadioMode } from '../lib/music';
 import { TrackMenuButton } from '../components/TrackMenu';
 import { Button, Cover, Empty, IconButton, Spinner, cx } from '../components/ui';
 import { fmtDuration, providerLabel } from '../lib/format';
+import { useDesktop } from '../lib/desktop';
 import {
   cycleRepeat,
   cycleShuffle,
@@ -16,6 +20,7 @@ import {
   prev,
   removeFromQueue,
   seek,
+  setVolume,
   toggle,
   useListen,
   type ListenTrack,
@@ -30,10 +35,12 @@ import { canWave, seedKey, startWave, trackSeed, useWave } from '../lib/wave';
 export function PlayerPage() {
   const track = useListen((s) => s.track);
   const phase = useListen((s) => s.phase);
+  const preparing = usePreparation(track?.ref, phase === 'resolving' || phase === 'loading');
   const info = useListen((s) => s.info);
   const error = useListen((s) => s.error);
   const position = useListen((s) => s.position);
   const duration = useListen((s) => s.duration);
+  const volume = useListen((s) => s.volume);
   const shuffle = useListen((s) => s.shuffle);
   const smart = useListen((s) => s.smart);
   const repeat = useListen((s) => s.repeat);
@@ -46,6 +53,25 @@ export function PlayerPage() {
   const [scrub, setScrub] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const { starting } = useWave();
+  const desktop = useDesktop();
+  const music = useMusicSettings();
+  const [radioMode,setRadioMode] = useState<RadioMode|null>(null);
+
+  if (!track && desktop)
+    return (
+      <div className="relative left-1/2 min-h-dvh w-[calc(100vw-24px)] max-w-none -translate-x-1/2 bg-bg px-8 py-6">
+        <IconButton icon="down" label="Свернуть" onClick={() => goBack('/home')} />
+        <div className="mx-auto flex min-h-[70vh] max-w-lg flex-col items-center justify-center text-center">
+          <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-3xl bg-raised text-accent"><Icon name="note" size={36} /></div>
+          <h1 className="text-2xl font-bold">Сейчас ничего не играет</h1>
+          <p className="mt-3 text-muted">Выберите трек в библиотеке или найдите что-нибудь новое.</p>
+          <div className="mt-7 flex flex-wrap justify-center gap-3">
+            <Link to="/library" className="rounded-full bg-accent px-6 py-3 font-semibold text-on-accent transition hover:bg-accent-strong">Открыть библиотеку</Link>
+            <Link to="/search" className="rounded-full border border-line bg-raised px-6 py-3 font-semibold transition hover:bg-hover">Перейти к поиску</Link>
+          </div>
+        </div>
+      </div>
+    );
 
   if (!track)
     return (
@@ -76,14 +102,7 @@ export function PlayerPage() {
   const firstArtist = track.artists?.find((a) => a.ref);
   const waveSeed = trackSeed({ ...track, nd_song_id: info?.nd_song_id });
 
-  return (
-    <div className="pt-safe mx-auto flex min-h-dvh max-w-2xl flex-col">
-      <div className="flex min-h-14 items-center gap-1 px-2">
-        <IconButton icon="down" label="Свернуть" onClick={() => goBack('/home')} />
-        <div className="min-w-0 flex-1 text-center text-xs uppercase tracking-wide text-muted">{contextLabel(context)}</div>
-        <TrackMenuButton track={{ ...track, nd_song_id: info?.nd_song_id }} inPlayer />
-      </div>
-
+  const playerBody = <>
       <div className="px-6 pt-2">
         <Cover src={track.cover_url || track.cover_small_url} alt={track.title} className="mx-auto aspect-square w-full max-w-[22rem] shadow-2xl" />
       </div>
@@ -151,7 +170,7 @@ export function PlayerPage() {
         <div className="flex justify-between pt-1 text-xs tabular-nums text-muted">
           <span>{fmtDuration(shownPos) || '0:00'}</span>
           <span className={cx('truncate px-2', phase === 'error' && 'text-danger')}>
-            {phase === 'error' ? error : phase === 'resolving' && !info ? 'Ищу файл…' : waiting ? 'Загрузка…' : source}
+            {phase === 'error' ? error : preparing ?? (phase === 'resolving' && !info ? 'Ищу файл…' : waiting ? 'Загрузка…' : source)}
           </span>
           <span>{fmtDuration(duration) || '–:––'}</span>
         </div>
@@ -193,15 +212,35 @@ export function PlayerPage() {
         />
       </div>
 
+      {desktop && (
+        <div className="mx-6 mt-4 flex items-center gap-3 text-muted">
+          <Icon name="volume" size={19} />
+          <input type="range" className="hm-range min-w-0 flex-1" aria-label="Громкость" aria-valuetext={`${Math.round(volume * 100)}%`}
+            min={0} max={100} step={1} value={Math.round(volume * 100)}
+            style={{ '--p': `${volume * 100}%` } as CSSProperties}
+            onChange={(e) => setVolume(Number(e.target.value) / 100)} />
+          <span className="w-10 text-right text-xs tabular-nums">{Math.round(volume * 100)}%</span>
+        </div>
+      )}
       {canWave() && waveSeed && (
         <div className="px-6 pt-4">
-          <Button icon="wave" block disabled={starting !== null} busy={starting === seedKey(waveSeed)} onClick={() => void startWave(waveSeed, 'player')}>
+          <select className="input mb-3" aria-label="Знакомая музыка в радио по треку" value={radioMode??music.radio_mode} onChange={(e)=>setRadioMode(e.target.value as RadioMode)}><option value="favorites">Больше знакомого</option><option value="normal">Баланс знакомого и нового</option><option value="discover">Больше открытий</option></select>
+          <Button icon="wave" block disabled={starting !== null} busy={starting === seedKey(waveSeed)} onClick={() => void startWave(waveSeed, 'player',radioMode??music.radio_mode)}>
             Моя волна по треку
           </Button>
         </div>
       )}
-
-      <Queue queue={queue} index={index} onWave={onWave} />
+      <div className="mx-4 mt-5"><MusicTrack key={track.ref} refId={track.ref} title={track.title} artist={track.artist} duration={duration} position={position} onSeek={seek} playedRef={info?.ref} resolvedKey={`${info?.kind}:${info?.provider}:${info?.page_url}:${info?.nd_song_id}`}/><Link className="mt-3 block text-center text-sm text-muted underline" to="/music-settings">Эквалайзер и настройки звука</Link></div>
+  </>;
+  return (
+    <div className={cx('pt-safe mx-auto flex min-h-dvh max-w-2xl flex-col', desktop && 'relative left-1/2 w-[calc(100vw-24px)] !max-w-6xl -translate-x-1/2 !grid !grid-cols-[minmax(0,1.1fr)_minmax(360px,.9fr)] !grid-rows-[auto_1fr] !items-start !gap-x-8 !gap-y-0 px-6 pb-12')}>
+      <div className={cx('flex min-h-14 items-center gap-1 px-2', desktop && 'col-span-2 w-full')}>
+        <IconButton icon="down" label="Свернуть" onClick={() => goBack('/home')} />
+        <div className="min-w-0 flex-1 text-center text-xs uppercase tracking-wide text-muted">{contextLabel(context)}</div>
+        <TrackMenuButton track={{ ...track, nd_song_id: info?.nd_song_id }} inPlayer />
+      </div>
+      {desktop ? <div className="min-w-0 rounded-3xl border border-line bg-surface pb-6">{playerBody}</div> : playerBody}
+      <Queue queue={queue} index={index} onWave={onWave} desktop={desktop} />
     </div>
   );
 }
@@ -214,16 +253,19 @@ function contextLabel(context: string): string {
   )[context] ?? 'Сейчас играет';
 }
 
-function Queue({ queue, index, onWave }: { queue: readonly ListenTrack[]; index: number; onWave: boolean }) {
+function Queue({ queue, index, onWave, desktop }: { queue: readonly ListenTrack[]; index: number; onWave: boolean; desktop: boolean }) {
   const current = useRef<HTMLLIElement>(null);
   const upcoming = queue.length - index - 1;
   // the current track's row in view once, not on every change of the queue
   useEffect(() => {
-    current.current?.scrollIntoView({ block: 'nearest' });
+    if (desktop && current.current) {
+      const list = current.current.closest('section');
+      if (list) list.scrollTop += current.current.getBoundingClientRect().top - list.getBoundingClientRect().top - list.clientHeight / 2;
+    } else current.current?.scrollIntoView({ block: 'nearest' });
   }, []);
 
   return (
-    <section aria-label="Очередь" className="mt-6 flex-1 rounded-t-2xl bg-surface pb-[calc(16px+env(safe-area-inset-bottom))]">
+    <section aria-label="Очередь" className={cx('mt-6 flex-1 rounded-t-2xl bg-surface pb-[calc(16px+env(safe-area-inset-bottom))]', desktop && 'mt-0 max-h-[calc(100dvh-110px)] min-h-0 w-full overflow-y-auto rounded-3xl border border-line pb-4')}>
       <div className="flex items-center justify-between px-4 pb-1 pt-4">
         <h2 className="text-lg font-bold">Далее</h2>
         <span className="text-xs text-muted">{onWave ? 'Подбирается на ходу' : upcoming > 0 ? `${upcoming} в очереди` : 'Очередь закончится на этом треке'}</span>

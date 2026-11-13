@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
+import { MusicProfile } from '../components/MusicProfile';
 import { api } from '../api/client';
 import type { TrackOut } from '../api/types';
 import { TrackRow, listenTrack } from '../components/catalog';
@@ -16,6 +17,7 @@ import { attempt, toast } from '../lib/ui';
 
 export function AlbumPage({ refId }: { refId: string }) {
   const [rev, setRev] = useState(0);
+  const [customCover,setCustomCover] = useState('');
   const res = useAsync((s) => api.album(refId, s, rev > 0), [refId, rev]);
   const [dlBusy, setDlBusy] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -137,7 +139,7 @@ export function AlbumPage({ refId }: { refId: string }) {
         </div>
         <Bar overlay />
         <div className="relative flex flex-col items-center px-6 pb-4 text-center">
-          <Cover src={album.cover_url} alt={album.title} className="aspect-square w-[min(64vw,260px)] shadow-2xl" icon="disc" />
+          <Cover src={customCover || album.cover_url} alt={album.title} className="aspect-square w-[min(64vw,260px)] shadow-2xl" icon="disc" />
           <h1 className="mt-4 text-2xl font-extrabold leading-tight">{album.title}</h1>
           <LikeButton targetType="album" refId={album.ref} title={album.title} size={24}
             data={{ name: album.title, artist: album.artist, artist_ref: album.artist_ref }} />
@@ -182,6 +184,7 @@ export function AlbumPage({ refId }: { refId: string }) {
         </Button>
       </div>
 
+      <MusicProfile kind="album" refId={refId} onCover={setCustomCover}/>
       <section aria-label="Треки" className="pt-2">
         {discs.map(([disc, list]) => (
           <div key={disc}>

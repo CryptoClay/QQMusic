@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { MusicProfile } from '../components/MusicProfile';
 import { api } from '../api/client';
 import type { AlbumOut } from '../api/types';
 import { ReleaseCard, TrackRow } from '../components/catalog';
@@ -15,6 +16,7 @@ import { canWave, seedKey, startWave, useWave } from '../lib/wave';
 export function ArtistPage({ refId }: { refId: string }) {
   const res = useAsync((s) => api.artist(refId, s), [refId]);
   const [showAllTop, setShowAllTop] = useState(false);
+  const [customCover,setCustomCover] = useState('');
   const [busyRef, setBusyRef] = useState<string | null>(null);
   const [allBusy, setAllBusy] = useState(false);
   const wave = useWave();
@@ -80,7 +82,7 @@ export function ArtistPage({ refId }: { refId: string }) {
         </div>
         <TopBar overlay />
         <div className="relative flex flex-col items-center px-4 pb-4 pt-2 text-center">
-          <Cover src={artist.picture_url} size={176} round icon="user" alt={artist.name} className="shadow-2xl" />
+          <Cover src={customCover || artist.picture_url} size={176} round icon="user" alt={artist.name} className="shadow-2xl" />
           <h1 className="mt-4 text-3xl font-extrabold leading-tight">{artist.name}</h1>
           <LikeButton targetType="artist" refId={artist.ref} title={artist.name} size={24} data={{ name: artist.name }} />
           <p className="mt-1 text-sm text-muted">
@@ -95,6 +97,7 @@ export function ArtistPage({ refId }: { refId: string }) {
         </div>
       </div>
 
+      <MusicProfile kind="artist" refId={refId} onCover={setCustomCover}/>
       {top_tracks.length > 0 && (
         <section aria-label="Популярные треки">
           <SectionTitle>Популярные треки</SectionTitle>
