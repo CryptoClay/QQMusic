@@ -246,17 +246,6 @@
 .home-shortcut:active {
   transform: scale(0.98);
 }
-.home-page > header,
-.home-page > div:has(> .home-frequency),
-.home-page > div:has(> .home-shortcut) {
-  animation: home-arrive 0.65s ease-out both;
-}
-.home-page > div:has(> .home-frequency) {
-  animation-delay: 0.07s;
-}
-.home-page > div:has(> .home-shortcut) {
-  animation-delay: 0.14s;
-}
 .home-page section[aria-label] a,
 .home-page section[aria-label] button {
   transition:
@@ -342,16 +331,6 @@
 @keyframes home-signal {
   to {
     height: 24px;
-  }
-}
-@keyframes home-arrive {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
   }
 }
 @media (prefers-reduced-motion: reduce) {

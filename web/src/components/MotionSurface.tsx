@@ -8,6 +8,7 @@ export function MotionSurface({ page, children }: { page: string; children: Reac
   useLayoutEffect(() => {
     const root = ref.current;
     if (!root || typeof Element.prototype.animate !== 'function') return;
+    const pageSettledAt = performance.now() + 180;
     const media = window.matchMedia('(prefers-reduced-motion: reduce)');
     const seen = new WeakSet<Element>();
     const watched = new Set<Element>();
@@ -27,6 +28,7 @@ export function MotionSurface({ page, children }: { page: string; children: Reac
           watched.delete(element);
           seen.add(element);
           if (
+            performance.now() < pageSettledAt ||
             element.contains(document.activeElement) ||
             element.parentElement?.closest('[data-reveal], [data-motion-list] > *, .grid > *, ul > li')
           )
@@ -80,11 +82,11 @@ export function MotionSurface({ page, children }: { page: string; children: Reac
     };
     root.addEventListener('focusin', focus);
     media.addEventListener('change', preference);
-    // Fallback for browsers without View Transitions, and browser Back/Forward.
-    enter =
-      !media.matches && !document.documentElement.classList.contains('route-transitioning')
-        ? root.animate([{ opacity: 0.35 }, { opacity: 1 }], { duration: 200, easing: 'ease-out' })
-        : null;
+    // Animate live opacity only: async content can change height without stretching a frozen image.
+    // Visible rows arriving during this fade share it instead of fading a second time.
+    enter = !media.matches
+      ? root.animate([{ opacity: 0.65 }, { opacity: 1 }], { duration: 180, easing: 'ease-out' })
+      : null;
     return () => {
       changes.disconnect();
       observer.disconnect();
