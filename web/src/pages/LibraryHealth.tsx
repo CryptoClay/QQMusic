@@ -72,6 +72,7 @@ export function LibraryHealthPage() {
         }
       />
       <div className="space-y-6 px-4">
+        <Link to="/metadata" className="block rounded-xl border border-line bg-surface p-4 font-semibold text-accent">Порядок в тегах: исполнители, диски, даты и обложки →</Link>
         <Notice kind="info">
           Проверка читает файлы и теги. Изменения применяются только после предпросмотра. Похожие записи могут быть
           разными версиями.

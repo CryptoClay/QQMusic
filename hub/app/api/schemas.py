@@ -197,6 +197,7 @@ class TrackSourceOut(BaseModel):
 
 
 class LibAlbumOut(BaseModel):
+    release_date: date | None = None
     id: int
     uid: str
     title: str
@@ -215,6 +216,7 @@ class AlbumPatchIn(BaseModel):
     title: str | None = None
     album_artist: str | None = None
     year: int | None = None
+    release_date: date | None = None
     genre: str | None = None
     release_type: Literal["album", "single", "ep", "compilation"] | None = None
 

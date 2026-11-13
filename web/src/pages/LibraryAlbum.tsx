@@ -247,6 +247,7 @@ function AlbumForm({
   const [title, setTitle] = useState(album.title);
   const [artist, setArtist] = useState(album.album_artist);
   const [year, setYear] = useState(album.year ? String(album.year) : '');
+  const [releaseDate, setReleaseDate] = useState(album.release_date ?? '');
   const [genre, setGenre] = useState(album.genre ?? '');
   const [type, setType] = useState<ReleaseType>(RELEASE_TYPES.includes(album.release_type as ReleaseType) ? (album.release_type as ReleaseType) : 'album');
   const [busy, setBusy] = useState(false);
@@ -257,11 +258,13 @@ function AlbumForm({
     setTitle(album.title);
     setArtist(album.album_artist);
     setYear(album.year ? String(album.year) : '');
+    setReleaseDate(album.release_date ?? '');
     setGenre(album.genre ?? '');
     setType(RELEASE_TYPES.includes(album.release_type as ReleaseType) ? album.release_type as ReleaseType : 'album');
-  }, [album.id, album.title, album.album_artist, album.year, album.genre, album.release_type]);
+  }, [album.id, album.title, album.album_artist, album.year, album.release_date, album.genre, album.release_type]);
 
   const dirty =
+    releaseDate !== (album.release_date ?? '') ||
     title.trim() !== album.title ||
     artist.trim() !== album.album_artist ||
     toIntOrNull(year) !== (album.year ?? null) ||
@@ -271,7 +274,7 @@ function AlbumForm({
   const save = async () => {
     setBusy(true);
     const r = await attempt(
-      async () => { const applied = await review({ action: 'album', id: album.id, fields: { title: title.trim(), album_artist: artist.trim(), year: toIntOrNull(year), genre: genre.trim() || null, release_type: type } }); return applied ? api.libAlbum(album.id) : null; },
+      async () => { const applied = await review({ action: 'album', id: album.id, fields: { title: title.trim(), album_artist: artist.trim(), year: toIntOrNull(year), ...(releaseDate !== (album.release_date ?? '') ? { release_date: releaseDate || null } : {}), genre: genre.trim() || null, release_type: type } }); return applied ? api.libAlbum(album.id) : null; },
       'Сохранено',
     );
     setBusy(false);
@@ -285,7 +288,19 @@ function AlbumForm({
       return;
     }
     setCoverBusy(true);
-    const r = await attempt(() => api.setAlbumCover(album.id, file), 'Обложка обновлена');
+    const r = await attempt(async () => {
+      if (file.size > 15 * 1024 * 1024) throw new Error('Выберите изображение до 15 МБ');
+      const bitmap = await createImageBitmap(file);
+      const canvas = document.createElement('canvas');
+      const scale = Math.min(1, 768 / Math.max(bitmap.width,bitmap.height));
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale)); canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      const context = canvas.getContext('2d');
+      if (!context) { bitmap.close(); throw new Error('Не удалось подготовить обложку'); }
+      context.drawImage(bitmap,0,0,canvas.width,canvas.height); bitmap.close();
+      const cover_data = canvas.toDataURL('image/jpeg',.82).split(',')[1];
+      const result = await review({ action:'cover', id:album.id, fields:{cover_data} });
+      return result ? api.libAlbum(album.id) : null;
+    }, 'Обложка обновлена');
     setCoverBusy(false);
     if (r) onCover(r);
   };
@@ -314,7 +329,7 @@ function AlbumForm({
       </div>
       <div className="mt-3 grid grid-cols-3 gap-3">
         <Field label="Год">
-          <input className="input" inputMode="numeric" value={year} onChange={(e) => setYear(e.target.value.replace(/\D/g, '').slice(0, 4))} />
+          <input className="input" inputMode="numeric" value={year} onChange={(e) => { const value=e.target.value.replace(/\D/g, '').slice(0,4);setYear(value);if(releaseDate && releaseDate.slice(0,4)!==value)setReleaseDate(''); }} />
         </Field>
         <Field label="Жанр">
           <input className="input" value={genre} onChange={(e) => setGenre(e.target.value)} />
@@ -323,6 +338,7 @@ function AlbumForm({
           <ReleaseTypeSelect value={type} onChange={setType} />
         </Field>
       </div>
+      <div className="mt-3"><Field label="Дата релиза (необязательно)"><input type="date" className="input" value={releaseDate} onChange={e => { setReleaseDate(e.target.value); if(e.target.value)setYear(e.target.value.slice(0,4)); }} /></Field></div>
       {dirty && (
         <div className="mt-3 flex justify-end">
           <Button variant="primary" small icon="check" busy={busy} disabled={!title.trim() || !artist.trim()} onClick={save}>

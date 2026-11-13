@@ -234,6 +234,7 @@ export interface LibTrackOut {
 }
 
 export interface LibAlbumOut {
+  release_date?: string | null;
   id: number;
   uid: string;
   title: string;

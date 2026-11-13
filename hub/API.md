@@ -645,3 +645,14 @@ Public audio only serves snapshot UUIDs from local files, supports Range, and ne
 | GET | `/api/search/library?q=&quality=all&available=false&offset=0&limit=30` | Authenticated local library search, no remote catalog requests; quality: all/lossless/lossy |
 
 All four responses use private, no-store caching. [Browser workflows](../docs/browser-experience.md).
+
+## Queue controls and reviewed metadata
+
+- `GET /api/downloads/control`: private own pause state and latest job state/priority/retry time for up to 200 own items.
+- `PUT /api/downloads/control`: `{ "paused": true }`, current account only; already claimed jobs finish.
+- `POST /api/downloads/items/{id}/priority`: optional `{ "priority": 0..100 }`, default 100 for legacy callers.
+- `GET /api/library/metadata?q=&offset=0`: admin metadata inventory and name variants, 100 tracks/page.
+- Existing `/api/library/preview` supports `tracks`, `number`, `cover`; `tracks/number` use ordered `ids`, `number` fields `{start, disc_no?}`, `cover` fields `{cover_data: base64}`. Existing apply tokens are user-bound, expire after ten minutes and reject stale state.
+- Album output and patch include nullable `release_date` (ISO date). Full-date edits synchronize the year.
+
+[Queue and metadata workflows](../docs/queue-and-metadata.md).

@@ -75,12 +75,19 @@ async def relocate_track(s: AsyncSession, track: Track, album: Album, *, cover: 
         track.path = PurePosixPath(new_dir_rel, dest.name).as_posix()
         track.nd_song_id = None  # re-linked after the next scan
         await asyncio.to_thread(_remove_empty_dirs, old_abs.parent)
+    current = library_abs(track.path)
+    if current.is_file():
+        track.size_bytes = (await asyncio.to_thread(current.stat)).st_size
 
 
 async def update_album(s: AsyncSession, album: Album, *, _locked: bool = False, **fields) -> Album:
     if not _locked:
         await begin_library_write(s)
     async with (nullcontext() if _locked else library_lock):
+        if fields.get('release_date'):
+            fields['year'] = fields['release_date'].year
+        elif 'year' in fields and album.release_date and fields['year'] != album.release_date.year:
+            fields['release_date'] = None
         old_dir = library_abs(album_reldir(album))
         change_genre = "genre" in fields and fields["genre"] != album.genre
         for k, v in fields.items():
@@ -101,10 +108,11 @@ async def update_album(s: AsyncSession, album: Album, *, _locked: bool = False, 
         return album
 
 
-async def set_album_cover(s: AsyncSession, album: Album, image: bytes) -> Album:
+async def set_album_cover(s: AsyncSession, album: Album, image: bytes, *, _locked: bool = False) -> Album:
     cover = await asyncio.to_thread(tagger.prepare_cover, image)
-    await begin_library_write(s)
-    async with library_lock:
+    if not _locked:
+        await begin_library_write(s)
+    async with (nullcontext() if _locked else library_lock):
         d = library_abs(album_reldir(album))
         await asyncio.to_thread(_write_cover_file, d, cover)
         album.cover_path = (album_reldir(album) / "cover.jpg").as_posix()
@@ -113,6 +121,7 @@ async def set_album_cover(s: AsyncSession, album: Album, image: bytes) -> Album:
             p = library_abs(t.path)
             if p.is_file():
                 await asyncio.to_thread(tagger.update_tags, p, cover=cover)
+                t.size_bytes = (await asyncio.to_thread(p.stat)).st_size
         await s.flush()
         return album
 
@@ -162,6 +171,7 @@ async def update_track(s: AsyncSession, track: Track, *, _locked: bool = False, 
         if album is None:
             if p.is_file():
                 await asyncio.to_thread(tagger.update_tags, p, **{k: v for k, v in fields.items() if v is not None or k not in {"title", "artist"}})
+                track.size_bytes = (await asyncio.to_thread(p.stat)).st_size
             await s.flush()
             return track
         await relocate_track(s, track, album, cover=await _album_cover(album))

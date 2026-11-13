@@ -6,16 +6,29 @@ import { sourceErrorSummary } from '../components/SourceProblem';
 import { Button, Cover, Empty, ErrorState, IconButton, PageHeader, ProgressBar, Segmented, SkeletonRows, StatusChip, cx } from '../components/ui';
 import { useDesktop } from '../lib/desktop';
 import { useHubConnected, useHubEvent } from '../lib/events';
-import { DOWNLOAD_ACTIVE, fmtWhen, providerLabel, warningText } from '../lib/format';
+import { DOWNLOAD_ACTIVE, fmtDeadline, fmtWhen, providerLabel, warningText } from '../lib/format';
 import { useAsync, useInterval } from '../lib/hooks';
 import { canPlay, playList } from '../lib/player';
 import { Link } from '../lib/router';
 import { attempt, toast } from '../lib/ui';
 
+interface QueueJob { priority: number; job_status: string; attempts: number; max_attempts: number; retry_at: string | null }
+interface QueueControl { paused: boolean; items: Record<string, QueueJob> }
+
 type Filter = 'all' | 'active' | 'problems';
 
 export function DownloadsPage() {
   const res = useAsync((s) => api.downloads(undefined, 200, s), []);
+  const control = useAsync(s => request<QueueControl>('GET', '/api/downloads/control', { signal: s }), []);
+  const [controlling, setControlling] = useState(false);
+  useHubEvent('community', () => control.reload(true));
+  const changePause = async () => {
+    if (!control.data) return;
+    setControlling(true);
+    const result = await attempt(() => request<{paused:boolean}>('PUT', '/api/downloads/control', { json:{paused:!control.data!.paused} }));
+    setControlling(false);
+    if (result) control.setData(previous => previous ? {...previous,paused:result.paused} : previous);
+  };
   const connected = useHubConnected();
   const [filter, setFilter] = useState<Filter>('all');
   const [clearing, setClearing] = useState(false);
@@ -51,6 +64,7 @@ export function DownloadsPage() {
     }),
     [items],
   );
+  useInterval(() => control.reload(true), counts.active ? 5000 : null);
   const byReason = (error: string | null | undefined) => { const t=(error??'').toLowerCase(); return /cookies|робот|not a bot|сессия/.test(t)?'session':/403|forbidden/.test(t)?'access':/ssl|tls|timeout|сеть|ожидания/.test(t)?'network':'other'; };
   const shown = items.filter((x) => reason==='all' || byReason(x.error)===reason).filter((x) =>
     filter === 'active' ? DOWNLOAD_ACTIVE.includes(x.status) : filter === 'problems' ? x.status === 'failed' || x.status === 'needs_review' : true,
@@ -75,7 +89,7 @@ export function DownloadsPage() {
 
   const desktop = useDesktop();
   const repeatProblems = async () => {setRetrying(true);const ids=shown.filter((x)=>['failed','needs_review'].includes(x.status)).slice(0,100).map((x)=>x.id); const result=await attempt(()=>request<{queued:number}>('POST','/api/downloads/retry-batch',{json:{ids}})); if(result){toast(`Повторно поставлено в очередь: ${result.queued}`,'success');res.reload();}setRetrying(false);};
-  const priority = async (id:number) => {const result=await attempt(()=>request('POST',`/api/downloads/items/${id}/priority`));if(result)toast('Загрузка будет взята первой из ожидающих','success');};
+  const priority = async (id:number, value:number) => {const result=await attempt(()=>request('POST',`/api/downloads/items/${id}/priority`,{json:{priority:value}}));if(result){control.reload(true);toast('Приоритет сохранён','success');}};
 
   return (
     <div className={desktop ? 'w-full max-w-[900px] px-8 pb-12' : ''}>
@@ -93,6 +107,13 @@ export function DownloadsPage() {
           </Button>
         }
       />
+      <div className="mx-4 mb-4 rounded-xl border border-line bg-surface p-4 text-sm">
+        {control.error ? <ErrorState text={control.error} onRetry={() => control.reload()} /> : <>
+          <div className="flex flex-wrap items-center justify-between gap-3"><strong>{!control.data ? 'Проверяю состояние очереди…' : control.data.paused ? 'Очередь приостановлена' : 'Очередь работает'}</strong><Button small busy={controlling} disabled={!control.data} onClick={() => void changePause()}>{control.data?.paused ? 'Продолжить очередь' : 'Приостановить очередь'}</Button></div>
+          <p className="mt-2 text-muted">Пауза действует для вашего аккаунта на всех устройствах и сохраняется после перезапуска. Уже начатые файлы завершатся; новые скачивания не запускаются.</p>
+          <p className="mt-1 text-xs text-muted">Автоматически повторяются только временные сетевые ошибки. Вход в источник, недоступный файл и неверные данные требуют вашего действия.</p>
+        </>}
+      </div>
       {running.map((imp) => (
         <Link key={imp.id} to={`/import/${imp.id}`} className="card mx-4 mb-3 flex items-center gap-3 p-3 hover:bg-hover">
           <Icon name="transfer" size={22} className="shrink-0 text-accent" />
@@ -140,7 +161,9 @@ export function DownloadsPage() {
               busy={busyId === item.id}
               onRetry={() => act(item, 'retry')}
               onCancel={() => act(item, 'cancel')}
-              onPriority={() => void priority(item.id)}
+              onPriority={(value) => void priority(item.id,value)}
+              job={control.data?.items[String(item.id)]}
+              paused={!!control.data?.paused}
               onPlay={canPlay() && item.status === 'done' && item.nd_song_id ? () => playList(shown.filter((x) => x.status === 'done'), (x) => x.nd_song_id, item) : undefined}
             />
           ))}
@@ -157,6 +180,8 @@ function DownloadRow({
   onCancel,
   onPlay,
   onPriority,
+  job,
+  paused,
 }: {
   item: DownloadItemOut;
   busy: boolean;
@@ -164,7 +189,9 @@ function DownloadRow({
   onCancel: () => void;
   /** Done and scanned by Navidrome: plays it (and the finished ones around it) in the app's player. */
   onPlay?: () => void;
-  onPriority: () => void;
+  onPriority: (priority:number) => void;
+  job?: QueueJob;
+  paused: boolean;
 }) {
   const active = DOWNLOAD_ACTIVE.includes(item.status);
   const problem = item.status === 'failed' || item.status === 'needs_review';
@@ -181,6 +208,8 @@ function DownloadRow({
           <div className="truncate text-[13px] text-muted">{[item.artist, item.album].filter(Boolean).join(' · ')}</div>
           <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-dim">
             <StatusChip status={item.status} progress={item.progress} />
+            {active && job?.job_status === 'queued' && paused && <span className="text-warn">На паузе</span>}
+            {active && job?.job_status === 'queued' && job.retry_at && <span>Повтор {job.attempts}/{job.max_attempts} · {fmtDeadline(job.retry_at)}</span>}
             {item.liked && item.status !== 'done' && <span className="text-accent">♥ после загрузки</span>}
             {item.provider && <span>{providerLabel(item.provider)}</span>}
             <span>{fmtWhen(item.updated_at)}</span>
@@ -197,7 +226,7 @@ function DownloadRow({
         </div>
       </Link>
       <div className="flex shrink-0 flex-col items-center">
-        {item.status==='queued' && <IconButton icon="back" className="rotate-90" label="Повысить приоритет" onClick={onPriority} />}
+        {active && job?.job_status === 'queued' && <select aria-label={`Приоритет: ${item.title}`} className="input h-9 w-24 max-w-full text-xs" value={Math.max(0,job.priority)} onChange={e => onPriority(Number(e.target.value))}><option value={0}>Обычный</option><option value={50}>Повышенный</option><option value={100}>Срочно</option></select>}
         {active ? (
           <IconButton icon="x" label="Отменить" busy={busy} onClick={onCancel} className="text-muted" />
         ) : problem || item.status === 'cancelled' ? (

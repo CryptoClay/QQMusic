@@ -386,11 +386,17 @@ async def handle_download_item(job: Job) -> None:
     finally:
         cleanup_dir(stage)
 
+    from app.jobs.retry_policy import TransientDownloadError, transient
+    if last_reason and transient(last_reason):
+        raise TransientDownloadError(last_reason)
     if chosen:
         await update_item(item_id, status="needs_review", error=f"Файл не подошёл ({last_reason})")
     elif not all_cands:
         if errors and len(errors) >= len(providers):
-            raise RuntimeError("все источники недоступны: " + "; ".join(errors))
+            message = "все источники недоступны: " + "; ".join(errors)
+            if any(transient(error) for error in errors):
+                raise TransientDownloadError(message)
+            raise PermanentError(message)
         await update_item(item_id, status="needs_review", error="Не найдено ни в одном источнике")
     elif not meta:
         sure = classify(all_cands, get_settings().cfg.matching) == "auto"

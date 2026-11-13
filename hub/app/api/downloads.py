@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select, update
+from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import listen
@@ -19,7 +20,7 @@ from app.events import bus
 from app.jobs.downloads import create_items, item_links, item_out, item_ref
 from app.jobs.queue import enqueue, notify
 from app.library.owned import ACTIVE_STATUSES, find_existing, quiet
-from app.models import DownloadBatch, DownloadItem, Job, PendingPlaylistAdd, User
+from app.models import DownloadBatch, DownloadControl, DownloadItem, Job, PendingPlaylistAdd, User
 from app.providers.base import Candidate, TrackQuery
 from app.services import svc
 
@@ -30,9 +31,46 @@ class BatchRetryIn(BaseModel):
     ids: list[int] = Field(min_length=1, max_length=100)
 
 
+class ControlIn(BaseModel):
+    paused: bool
+
+
+class PriorityIn(BaseModel):
+    priority: int = Field(default=100, ge=0, le=100)
+
+
+@router.get('/control')
+async def control(response: Response, user: User = Depends(current_user),
+                  s: AsyncSession = Depends(get_session, scope='function')):
+    response.headers.update({'Cache-Control': 'private, no-store', 'Vary': 'Cookie'})
+    setting = await s.get(DownloadControl, user.id)
+    item_ids = select(DownloadItem.id).where(DownloadItem.user_id == user.id).order_by(DownloadItem.id.desc()).limit(200)
+    jobs = await s.scalars(select(Job).where(Job.kind == 'download_item',
+        func.json_extract(Job.payload_json, '$.item_id').in_(item_ids)).order_by(Job.id.desc()))
+    states = {}
+    for job in jobs:
+        item_id = str(job.payload_json['item_id'])
+        if item_id not in states:
+            states[item_id] = {'priority': job.priority, 'job_status': job.status, 'attempts': job.attempts,
+                               'max_attempts': job.max_attempts, 'retry_at': job.run_after if job.status == 'queued' and job.attempts else None}
+    return {'paused': bool(setting and setting.paused), 'items': states}
+
+
+@router.put('/control')
+async def set_control(body: ControlIn, user: User = Depends(current_user),
+                      s: AsyncSession = Depends(get_session, scope='function')):
+    await s.execute(insert(DownloadControl).values(user_id=user.id, paused=body.paused)
+                    .on_conflict_do_update(index_elements=['user_id'], set_={'paused': body.paused}))
+    await s.commit()
+    bus.publish(user.id, 'community', {})
+    notify()
+    return {'paused': body.paused}
+
+
 @router.post('/retry-batch')
 async def retry_batch(body: BatchRetryIn, user: User = Depends(current_user),
                       s: AsyncSession = Depends(get_session, scope='function')):
+    await s.execute(update(User).where(User.id == user.id).values(last_seen_at=User.last_seen_at))
     ids = list(dict.fromkeys(body.ids))
     owned = (await s.execute(select(DownloadItem.id).where(DownloadItem.id.in_(ids), DownloadItem.user_id == user.id))).scalars().all()
     if len(owned) != len(ids):
@@ -59,13 +97,15 @@ async def retry_batch(body: BatchRetryIn, user: User = Depends(current_user),
 
 
 @router.post('/items/{item_id}/priority')
-async def prioritize(item_id: int, user: User = Depends(current_user),
+async def prioritize(item_id: int, body: PriorityIn | None = None, user: User = Depends(current_user),
                      s: AsyncSession = Depends(get_session, scope='function')):
     item = await _own_item(s, user, item_id)
-    if item.status != 'queued':
+    if item.status in ('done', 'cancelled', 'needs_review', 'failed'):
         raise HTTPException(409, 'Приоритет можно повысить только для ожидающей загрузки')
     result = await s.execute(update(Job).where(Job.kind == 'download_item', Job.status == 'queued',
-        func.json_extract(Job.payload_json, '$.item_id') == item_id).values(priority=100))
+        func.json_extract(Job.payload_json, '$.item_id') == item_id).values(priority=body.priority if body else 100))
+    if not result.rowcount:
+        raise HTTPException(409, 'Задание уже взято в работу. Обновите очередь')
     await s.commit()
     notify()
     return {'updated': result.rowcount}
@@ -305,9 +345,18 @@ async def candidate_from_url(url: str, q: TrackQuery) -> Candidate:
 @router.post("/items/{item_id}/retry", response_model=DownloadItemOut)
 async def retry(item_id: int, body: RetryIn, user: User = Depends(current_user),
                 s: AsyncSession = Depends(get_session, scope="function")):
+    await s.execute(update(User).where(User.id == user.id).values(last_seen_at=User.last_seen_at))
     item = await _own_item(s, user, item_id)
     if item.status in ("searching", "downloading", "tagging", "importing"):
         raise HTTPException(409, "Загрузка ещё идёт")
+    if item.status not in ACTIVE_STATUSES:
+        await queue_budget(s, user.id, 1)
+    pending = list(await s.scalars(select(Job).where(Job.kind == 'download_item', Job.status.in_(['queued', 'running']),
+        func.json_extract(Job.payload_json, '$.item_id') == item_id)))
+    if any(job.status == 'running' for job in pending) or (pending and item.status == 'queued'):
+        raise HTTPException(409, 'Задание уже ожидает или выполняется')
+    for job in pending:
+        job.status = 'done'  # retired jobs of a terminal item must not race its new attempt
     if body.candidate_index is not None:
         cands = item.candidates_json or []
         if not 0 <= body.candidate_index < len(cands):
@@ -318,8 +367,6 @@ async def retry(item_id: int, body: RetryIn, user: User = Depends(current_user),
         item.chosen_candidate_json = (await candidate_from_url(body.url, q)).model_dump(mode="json")
     else:
         item.chosen_candidate_json = None
-    if item.status not in ACTIVE_STATUSES:
-        await queue_budget(s, user.id, 1)
     item.status = "queued"
     item.error = None
     item.progress = 0

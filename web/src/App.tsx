@@ -1,3 +1,4 @@
+import { MetadataPage } from './pages/Metadata';
 import { NetworkStatus } from './components/NetworkStatus';
 import { WelcomePage, InstallPage, ServerPage } from './pages/Experience';
 import { setListeningAccount } from './lib/plays';
@@ -106,6 +107,7 @@ const ROUTES: RouteDef[] = [
   ['/track/:ref', 'library', (p,r) => <TrackDetailsPage key={p.ref} refId={p.ref} title={r.query.get('title')??''} artist={r.query.get('artist')??''} />],
   ['/nextcloud', 'library', () => <NextcloudPage />],
   ['/sources', 'more', () => <SourcesPage />],
+  ['/metadata', 'more', () => <MetadataPage />],
   ['/library-health', 'more', () => <LibraryHealthPage />],
   ['/community', 'more', () => <CommunityPage />],
   ['/requests', 'more', (_,r) => <RequestsPage key={r.full} initial={{artist:r.query.get('artist')??'',title:r.query.get('title')??'',ref:r.query.get('ref')??'',kind:r.query.get('kind')==='album'?'album':'track'}}/>],

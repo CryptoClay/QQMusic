@@ -160,6 +160,7 @@ class Album(Base):
     title: Mapped[str] = mapped_column(String(512))
     album_artist: Mapped[str] = mapped_column(String(512))
     year: Mapped[int | None] = mapped_column(Integer)
+    release_date: Mapped[date | None] = mapped_column(Date)
     release_type: Mapped[str | None] = mapped_column(String(32))  # album/single/ep/compilation
     deezer_album_id: Mapped[str | None] = mapped_column(String(32), index=True)
     upc: Mapped[str | None] = mapped_column(String(32))
@@ -708,6 +709,12 @@ class InboxMessage(Base):
     target: Mapped[str] = mapped_column(String(200), default="/requests")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     read_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class DownloadControl(Base):
+    __tablename__ = "download_controls"
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    paused: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class UserPolicy(Base):

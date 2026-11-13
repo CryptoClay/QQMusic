@@ -3,15 +3,16 @@ import { request } from '../api/client';
 import { Button, Notice, Sheet } from '../components/ui';
 import { toastError } from './ui';
 
-export type LibraryEdit = { action: 'track' | 'album' | 'merge' | 'move'; id: number; ids?: number[]; fields?: object };
+export type LibraryEdit = { action: 'track' | 'tracks' | 'number' | 'cover' | 'album' | 'merge' | 'move'; id: number; ids?: number[]; fields?: object };
 export interface LibraryPreview {
   token: string;
+  cover_preview?: string | null;
   action: LibraryEdit['action'];
   track_count: number;
   target_album?: { id: number; title: string; artist: string } | null;
   can_apply: boolean;
   warnings: string[];
-  changes: { field: string; before: unknown; after: unknown }[];
+  changes: { track?: string; field: string; before: unknown; after: unknown }[];
   tracks: { id: number; title: string; artist: string; path: string }[];
 }
 export interface LibraryApplied {
@@ -24,6 +25,8 @@ const labels: Record<string, string> = {
   album_artist: 'Исполнитель альбома',
   album: 'Альбом',
   year: 'Год',
+  release_date: 'Дата релиза',
+  cover: 'Обложка',
   genre: 'Жанр',
   release_type: 'Тип',
   track_no: '№ трека',
@@ -104,10 +107,11 @@ export function useLibraryReview() {
             </p>
           )}
           <p className="text-sm font-semibold">Затронуто треков: {preview.track_count}</p>
+          {preview.cover_preview && <img src={preview.cover_preview} alt="Новая обложка" className="mx-auto h-48 w-48 rounded-xl object-cover" />}
           <dl className="divide-y divide-line rounded-xl border border-line px-3">
             {preview.changes.map((change, index) => (
               <div key={index} className="py-3 text-sm">
-                <dt className="font-semibold">{labels[change.field] ?? change.field}</dt>
+                <dt className="font-semibold">{change.track && <span className="mb-1 block text-xs text-muted">{change.track}</span>}{labels[change.field] ?? change.field}</dt>
                 <dd className="mt-1 break-words text-muted">
                   {value(change.before)} → <span className="text-fg">{value(change.after)}</span>
                 </dd>

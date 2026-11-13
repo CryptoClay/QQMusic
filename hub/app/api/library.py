@@ -55,7 +55,7 @@ async def album_out(s: AsyncSession, a: Album, *, with_tracks: bool = False) -> 
         await s.execute(select(Track).where(Track.album_id == a.id).order_by(Track.disc_no, Track.track_no, Track.id))
     ).scalars().all()
     return LibAlbumOut(
-        id=a.id, uid=a.uid, title=a.title, album_artist=a.album_artist, year=a.year, release_type=a.release_type,
+        id=a.id, uid=a.uid, title=a.title, album_artist=a.album_artist, year=a.year, release_date=a.release_date, release_type=a.release_type,
         genre=a.genre, deezer_album_id=a.deezer_album_id, track_count=len(tracks), has_cover=_has_cover(a),
         tracks=[track_out(t) for t in tracks] if with_tracks else None,
     )
@@ -88,7 +88,7 @@ async def list_albums(q: str | None = None, offset: int = 0, limit: int = Query(
         .group_by(Track.album_id)
     )).all())
     return [
-        LibAlbumOut(id=a.id, uid=a.uid, title=a.title, album_artist=a.album_artist, year=a.year,
+        LibAlbumOut(id=a.id, uid=a.uid, title=a.title, album_artist=a.album_artist, year=a.year, release_date=a.release_date,
                     release_type=a.release_type, genre=a.genre, deezer_album_id=a.deezer_album_id,
                     track_count=counts.get(a.id, 0), has_cover=_has_cover(a))
         for a in rows

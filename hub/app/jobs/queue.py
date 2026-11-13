@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db import session_scope
+from app.jobs.retry_policy import transient
 from app.models import Job, utcnow
 from app.net import Priority, _priority
 
@@ -98,6 +99,10 @@ def background_slots() -> int:
 # a queued job a worker may take now: urgent, or background while a background slot is free
 _CLAIMABLE = (
     "status='queued' AND kind != 'assistant_task' AND "
+    "(kind NOT IN ('download_item','expand_batch') OR NOT EXISTS (SELECT 1 FROM download_controls c "
+    "WHERE c.paused=1 AND c.user_id=CASE WHEN jobs.kind='download_item' THEN "
+    "(SELECT user_id FROM download_items WHERE id=json_extract(jobs.payload_json,'$.item_id')) ELSE "
+    "(SELECT user_id FROM download_batches WHERE id=json_extract(jobs.payload_json,'$.batch_id')) END)) AND "
     "(kind != 'download_item' OR NOT EXISTS (SELECT 1 FROM user_policies p "
     "WHERE p.user_id=(SELECT d.user_id FROM download_items d WHERE d.id=json_extract(jobs.payload_json,'$.item_id')) "
     "AND p.parallel > 0 AND (SELECT COUNT(*) FROM jobs r JOIN download_items d "
@@ -171,12 +176,13 @@ async def run_job(job: Job) -> None:
     except PermanentError as e:
         log.warning("job %s (%s) failed permanently: %s", job.id, job.kind, e, extra={"job_id": job.id})
         await _finish(job.id, ok=False, error=str(e))
+        await final_failure(job, e)
     except asyncio.CancelledError:
         await asyncio.shield(_finish(job.id, ok=False, error="cancelled (shutdown)", retry_in=0))
         raise
     except Exception as e:
         tb = traceback.format_exc(limit=8)
-        if job.attempts < job.max_attempts:
+        if job.attempts < job.max_attempts and (job.kind != "download_item" or transient(e)):
             delay = min(600.0, 5 * 2 ** (job.attempts - 1))
             log.warning("job %s (%s) attempt %s failed: %r, retry in %ss", job.id, job.kind, job.attempts, e, delay,
                         extra={"job_id": job.id})
@@ -185,12 +191,7 @@ async def run_job(job: Job) -> None:
             log.error("job %s (%s) failed after %s attempts: %r", job.id, job.kind, job.attempts, e,
                       extra={"job_id": job.id})
             await _finish(job.id, ok=False, error=f"{e!r}\n{tb}")
-            on_fail = _failure_hooks.get(job.kind)
-            if on_fail:
-                try:
-                    await on_fail(job, e)
-                except Exception:
-                    log.exception("failure hook for job %s crashed", job.id)
+            await final_failure(job, e)
     else:
         await _finish(job.id, ok=True)
     finally:
@@ -200,6 +201,15 @@ async def run_job(job: Job) -> None:
 
 
 _failure_hooks: dict[str, Callable[[Job, Exception], Awaitable[None]]] = {}
+
+
+async def final_failure(job: Job, error: Exception) -> None:
+    hook = _failure_hooks.get(job.kind)
+    if hook:
+        try:
+            await hook(job, error)
+        except Exception:
+            log.exception("failure hook for job %s crashed", job.id)
 
 
 def on_final_failure(kind: str):

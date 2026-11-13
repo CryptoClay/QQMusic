@@ -10,7 +10,7 @@ import json
 import os
 import shutil
 import subprocess
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import httpx
@@ -151,9 +151,10 @@ async def drain_jobs(max_rounds: int = 20) -> None:
 
     for _ in range(max_rounds):
         async with session_scope() as s:
-            # ignore delays in tests
+            # Ignore delays with a definite past deadline. A value exactly at
+            # wall-clock "now" can still be future-dated after clock adjustment.
             for j in (await s.execute(select(Job).where(Job.status == "queued"))).scalars():
-                j.run_after = utcnow()
+                j.run_after = utcnow() - timedelta(seconds=1)
         job = await _claim("test")
         if job is None:
             return
