@@ -151,7 +151,7 @@ class Session(Base):
 
 
 class Album(Base):
-    """Album as the Hub manages it. `uid` is written into files as HOMEMUSIC_ALBUM_ID (Navidrome album PID)."""
+    """Album as the Hub manages it. `uid` is written into files as QQMUSIC_ALBUM_ID (Navidrome album PID)."""
 
     __tablename__ = "albums"
 
@@ -175,7 +175,7 @@ class Track(Base):
     __table_args__ = (Index("ix_tracks_fingerprint", "fingerprint"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    uid: Mapped[str] = mapped_column(String(36), unique=True)  # HOMEMUSIC_TRACK_ID (Navidrome track PID)
+    uid: Mapped[str] = mapped_column(String(36), unique=True)  # QQMUSIC_TRACK_ID (Navidrome track PID)
     album_id: Mapped[int | None] = mapped_column(ForeignKey("albums.id", ondelete="SET NULL"), index=True)
     path: Mapped[str] = mapped_column(String(1024), unique=True)  # relative to library/, forward slashes
     nd_song_id: Mapped[str | None] = mapped_column(String(64), index=True)

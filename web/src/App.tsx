@@ -37,6 +37,7 @@ import { MixPage, TastePage } from './pages/Mix';
 import { MorePage } from './pages/More';
 import { MusicSettingsPage, NotesPage, RecapPage, TrackDetailsPage } from './pages/Music';
 import { NextcloudPage } from './pages/Nextcloud';
+import { LibraryHealthPage } from './pages/LibraryHealth';
 import { SourcesPage } from './pages/Sources';
 import { PlayerPage } from './pages/Player';
 import { PlaylistsPage } from './pages/Playlists';
@@ -97,6 +98,7 @@ const ROUTES: RouteDef[] = [
   ['/track/:ref', 'library', (p,r) => <TrackDetailsPage key={p.ref} refId={p.ref} title={r.query.get('title')??''} artist={r.query.get('artist')??''} />],
   ['/nextcloud', 'library', () => <NextcloudPage />],
   ['/sources', 'more', () => <SourcesPage />],
+  ['/library-health', 'more', () => <LibraryHealthPage />],
   ['/admin', 'more', () => <AdminPage />],
   ['/admin/user/:id', 'more', (p) => <AdminUserPage key={p.id} id={Number(p.id)} />],
   ['/admin/insights', 'more', () => <InsightsOverviewPage />],

@@ -89,11 +89,11 @@ export function useDialog() {
   return useSyncExternalStore(dialogStore.subscribe, dialogStore.get, dialogStore.get);
 }
 
-/** Run an action, toast its error, return undefined on failure. */
+/** Run an action, toast its error, return undefined on failure. Null denotes a cancelled action. */
 export async function attempt<R>(fn: () => Promise<R>, success?: string): Promise<R | undefined> {
   try {
     const r = await fn();
-    if (success) toast(success, 'success');
+    if (success && r !== null) toast(success, 'success');
     return r;
   } catch (e) {
     toastError(e);

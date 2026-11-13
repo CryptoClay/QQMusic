@@ -181,6 +181,7 @@ class LibTrackOut(BaseModel):
     duration_s: int | None
     bitrate_kbps: int | None
     codec: str | None
+    genre: str | None = None
     explicit: bool | None
     source: str | None
     locked: bool

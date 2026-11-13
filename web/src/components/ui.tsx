@@ -1,4 +1,4 @@
-import { useEffect, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { goBack } from '../lib/router';
 import { useDesktop } from '../lib/desktop';
 import { downloadStatusLabel, percent } from '../lib/format';
@@ -339,23 +339,56 @@ export function Radio({ checked }: { checked: boolean }) {
 
 // --- sheet (bottom modal) -------------------------------------------------------------------------
 
+const openSheets: string[] = [];
+const sheetPanels = new Map<string, HTMLDivElement>();
+let sheetOverflow = '';
+
 export function Sheet({ open, onClose, title, children, footer }: { open: boolean; onClose: () => void; title: string; children: ReactNode; footer?: ReactNode }) {
+  const id = useId();
+  const [layer, setLayer] = useState(50);
+  const panel = useRef<HTMLDivElement>(null);
+  const close = useRef(onClose);
+  close.current = onClose;
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const previousFocus = document.activeElement;
+    if (!openSheets.length) sheetOverflow = document.body.style.overflow;
+    setLayer(50 + openSheets.length * 10);
+    openSheets.push(id);
+    if (panel.current) sheetPanels.set(id, panel.current);
+    const focusable = () => Array.from(panel.current?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]') ?? []).filter(el => el.getClientRects().length);
+    focusable()[0]?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (openSheets.at(-1) !== id) return;
+      if (e.key === 'Escape') { e.preventDefault(); close.current(); }
+      if (e.key === 'Tab') {
+        const items = focusable();
+        const first = items[0], last = items.at(-1);
+        if (!first || !last) { e.preventDefault(); panel.current?.focus(); return; }
+        if (e.shiftKey && (document.activeElement === first || !panel.current?.contains(document.activeElement))) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && (document.activeElement === last || !panel.current?.contains(document.activeElement))) { e.preventDefault(); first.focus(); }
+      }
+    };
     window.addEventListener('keydown', onKey);
-    const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
       window.removeEventListener('keydown', onKey);
-      document.body.style.overflow = prev;
+      const wasTop = openSheets.at(-1) === id;
+      const index = openSheets.indexOf(id);
+      if (index !== -1) openSheets.splice(index, 1);
+      sheetPanels.delete(id);
+      if (!openSheets.length) document.body.style.overflow = sheetOverflow;
+      if (wasTop) {
+        if (previousFocus instanceof HTMLElement && previousFocus !== document.body && previousFocus.isConnected && !previousFocus.matches(':disabled')) previousFocus.focus();
+        else sheetPanels.get(openSheets.at(-1) ?? '')?.querySelector<HTMLElement>('button:not(:disabled), input:not(:disabled)')?.focus();
+      }
     };
-  }, [open, onClose]);
+  }, [open, id]);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-label={title}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" style={{ zIndex: layer }} role="dialog" aria-modal="true" aria-label={title}>
       <button type="button" aria-label="Закрыть" className="absolute inset-0 bg-black/70" onClick={onClose} />
-      <div className="anim-up pb-safe relative flex max-h-[88dvh] w-full max-w-lg flex-col rounded-t-2xl bg-surface sm:rounded-2xl">
+      <div ref={panel} tabIndex={-1} className="anim-up pb-safe relative flex max-h-[88dvh] w-full max-w-lg flex-col rounded-t-2xl bg-surface sm:rounded-2xl">
         <div className="flex items-center gap-2 border-b border-line px-4 py-2">
           <h2 className="flex-1 truncate text-base font-bold">{title}</h2>
           <IconButton icon="x" label="Закрыть" onClick={onClose} />

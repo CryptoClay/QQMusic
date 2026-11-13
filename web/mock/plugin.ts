@@ -118,12 +118,15 @@ const SEARCH_PAGE = 25;
 
 // --- library -----------------------------------------------------------------------------------
 
+const libraryReviews = new Map<string, { body: Json; state: string }>();
 let libAlbums = [
   { id: 1, uid: 'a1', title: 'Магнит', album_artist: 'Три дня дождя', year: 2023, release_type: 'album', genre: 'Rock', deezer_album_id: '102', track_count: 3, has_cover: true },
   { id: 2, uid: 'a2', title: 'Группа крови', album_artist: 'Кино', year: 1988, release_type: 'album', genre: 'Rock', deezer_album_id: '7', track_count: 2, has_cover: true },
   { id: 3, uid: 'a3', title: 'Вендетта', album_artist: 'Земфира', year: 2005, release_type: 'album', genre: 'Rock', deezer_album_id: null, track_count: 2, has_cover: true },
   { id: 4, uid: 'a4', title: 'Записи с репетиции', album_artist: 'Своя группа', year: 2026, release_type: 'compilation', genre: null, deezer_album_id: null, track_count: 1, has_cover: false },
 ];
+
+libAlbums.push({ ...libAlbums[0], id: 5, uid: 'a5', has_cover: false });
 
 let libTracks = [
   { id: 11, album_id: 1, title: 'Демоны', artist: 'Три дня дождя', track_no: 1, explicit: true, warnings: [] as unknown[] },
@@ -135,6 +138,8 @@ let libTracks = [
   { id: 32, album_id: 3, title: 'Мы разбиваемся', artist: 'Земфира', track_no: 2, explicit: false, warnings: [] },
   { id: 41, album_id: 4, title: 'Песня у костра', artist: 'Своя группа', track_no: 1, explicit: false, warnings: [] },
 ];
+
+libTracks.push({ id: 18, album_id: 5, title: 'Демоны', artist: 'Три дня дождя', track_no: 4, explicit: true, warnings: [] });
 
 function libTrackOut(t: (typeof libTracks)[number]) {
   const a = libAlbums.find((x) => x.id === t.album_id);
@@ -153,6 +158,7 @@ function libTrackOut(t: (typeof libTracks)[number]) {
     bitrate_kbps: 320,
     codec: 'mp3',
     explicit: t.explicit,
+    genre: Object.hasOwn(t, 'genre') ? (t as Json).genre : a?.genre ?? null,
     source: t.album_id === 4 ? 'upload' : 'hitmoz',
     locked: t.explicit,
     warnings: t.warnings,
@@ -1275,6 +1281,35 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<boolea
   }
 
   // library
+  if (p === '/api/library/health' && m === 'GET') {
+    const keys = new Map<string, ReturnType<typeof libTrackOut>[]>();
+    for (const t of libTracks.map(libTrackOut)) { const k = `${t.artist}|${t.title}|${t.explicit}|${t.duration_s}`; keys.set(k, [...(keys.get(k) ?? []), t]); }
+    const albumKeys = new Map<string, typeof libAlbums>();
+    for (const a of libAlbums) { const k = `${a.album_artist}|${a.title}|${a.year}`; albumKeys.set(k, [...(albumKeys.get(k) ?? []), a]); }
+    const duplicates = [...keys.values()].filter(g => g.length > 1).map(g => ({ title: g[0].title, artist: g[0].artist, reason: 'Похожи по тегам и длительности; аудио может отличаться', tracks: g }));
+    const albumGroups = [...albumKeys.values()].filter(g => g.length > 1).map(g => g.map(a => ({ id: a.id, title: a.title, artist: a.album_artist, year: a.year })));
+    return send(res, 200, { tracks: libTracks.length, albums: libAlbums.length, bytes: 0, missing: 0, unlinked: 0, duplicate_groups: duplicates.length, duplicates, album_groups: albumGroups, album_group_count: albumGroups.length, issues: [], issue_count: 0 }), true;
+  }
+  if (p === '/api/library/preview' && m === 'POST') {
+    const b = await readJson(req);
+    const target = b.action === 'track' ? libTracks.find(t => t.id === Number(b.id)) : libAlbums.find(a => a.id === Number(b.id));
+    if (!target) return send(res, 404, { detail: 'Запись не найдена' }), true;
+    const ids = (b.ids ?? []) as number[];
+    const affected = b.action === 'track' ? libTracks.filter(t => t.id === Number(b.id)) : libTracks.filter(t => b.action === 'move' ? ids.includes(t.id) : b.action === 'merge' ? ids.includes(t.album_id) : t.album_id === Number(b.id));
+    const token = `mock-review-${Date.now()}-${Math.random()}`;
+    libraryReviews.set(token, { body: b, state: JSON.stringify([libAlbums, libTracks]) });
+    return send(res, 200, { token, action: b.action, target_album: b.action === 'track' ? null : { id: (target as Json).id, title: (target as Json).title, artist: (target as Json).album_artist }, track_count: affected.length, can_apply: true, warnings: ['Изменения затрагивают общую библиотеку. Файлы и UUID треков сохраняются.', ...(b.action === 'merge' ? ['Похожие треки останутся отдельными файлами. Альбомные ссылки могут потребовать обновления.'] : [])], changes: ['track','album'].includes(String(b.action)) ? Object.entries((b.fields ?? {}) as Json).filter(([k,v]) => (target as Json)[k] !== v).map(([field,after]) => ({field, before:(target as Json)[field] ?? null, after})) : affected.map(t => ({field:'album', before:libAlbums.find(a => a.id === t.album_id)?.title, after:(target as Json).title})), tracks: affected.map(libTrackOut) }), true;
+  }
+  if (p === '/api/library/apply' && m === 'POST') {
+    const b = await readJson(req); const saved = libraryReviews.get(String(b.token));
+    if (!saved || saved.state !== JSON.stringify([libAlbums,libTracks])) return send(res,409,{detail:'Библиотека изменилась. Откройте предпросмотр заново'}), true;
+    const op=saved.body;
+    if (op.action === 'track') Object.assign(libTracks.find(t => t.id === Number(op.id))!, op.fields);
+    else if (op.action === 'album') Object.assign(libAlbums.find(a => a.id === Number(op.id))!, op.fields);
+    else { const ids=op.ids as number[]; for (const t of libTracks) if (op.action === 'merge' ? ids.includes(t.album_id) : ids.includes(t.id)) t.album_id=Number(op.id); if(op.action === 'merge') libAlbums=libAlbums.filter(a => !ids.includes(a.id)); }
+    libraryReviews.delete(String(b.token));
+    return send(res,200,{ok:true,album_id:op.action === 'track' ? libTracks.find(t => t.id === Number(op.id))?.album_id : Number(op.id)}), true;
+  }
   if (p === '/api/library/albums' && m === 'GET') {
     const q = (url.searchParams.get('q') ?? '').toLowerCase();
     return send(res, 200, libAlbums.filter((a) => !q || a.title.toLowerCase().includes(q) || a.album_artist.toLowerCase().includes(q)).map((a) => libAlbumOut(a))), true;

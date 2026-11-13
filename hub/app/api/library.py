@@ -23,7 +23,7 @@ from app.api.schemas import (
     TracksMoveIn,
     TrackSourceOut,
 )
-from app.auth import current_user, user_navidrome
+from app.auth import admin_user, current_user, user_navidrome
 from app.catalog.models import split_ref
 from app.db import get_session
 from app.events import bus
@@ -41,7 +41,7 @@ def track_out(t: Track) -> LibTrackOut:
     return LibTrackOut(
         id=t.id, nd_song_id=t.nd_song_id, album_id=t.album_id, artist=t.artist, title=t.title, album=t.album,
         album_artist=t.album_artist, track_no=t.track_no, disc_no=t.disc_no, year=t.year, duration_s=t.duration_s,
-        bitrate_kbps=t.bitrate_kbps, codec=t.codec, explicit=t.explicit, source=t.source, locked=t.locked,
+        bitrate_kbps=t.bitrate_kbps, codec=t.codec, genre=t.genre, explicit=t.explicit, source=t.source, locked=t.locked,
         warnings=t.warnings or [], path=t.path,
     )
 
@@ -119,7 +119,7 @@ async def get_album(album_id: int, user: User = Depends(current_user), s: AsyncS
 
 
 @router.patch("/api/library/albums/{album_id}", response_model=LibAlbumOut)
-async def patch_album(album_id: int, body: AlbumPatchIn, user: User = Depends(current_user),
+async def patch_album(album_id: int, body: AlbumPatchIn, user: User = Depends(admin_user),
                       s: AsyncSession = Depends(get_session, scope="function")):
     a = await _album(s, album_id)
     await editor.update_album(s, a, **body.model_dump(exclude_unset=True))
@@ -128,7 +128,7 @@ async def patch_album(album_id: int, body: AlbumPatchIn, user: User = Depends(cu
 
 
 @router.put("/api/library/albums/{album_id}/cover", response_model=LibAlbumOut)
-async def put_cover(album_id: int, file: UploadFile = File(...), user: User = Depends(current_user),
+async def put_cover(album_id: int, file: UploadFile = File(...), user: User = Depends(admin_user),
                     s: AsyncSession = Depends(get_session, scope="function")):
     a = await _album(s, album_id)
     data = await file.read()
@@ -170,7 +170,7 @@ def _resize(data: bytes, size: int) -> bytes:
 
 
 @router.post("/api/library/albums/merge", response_model=LibAlbumOut)
-async def merge(body: AlbumMergeIn, user: User = Depends(current_user), s: AsyncSession = Depends(get_session, scope="function")):
+async def merge(body: AlbumMergeIn, user: User = Depends(admin_user), s: AsyncSession = Depends(get_session, scope="function")):
     target = await _album(s, body.target_id)
     await editor.merge_albums(s, body.source_ids, target)
     await _after_edit(s, user, target.id)
@@ -178,7 +178,7 @@ async def merge(body: AlbumMergeIn, user: User = Depends(current_user), s: Async
 
 
 @router.post("/api/library/tracks/move", response_model=LibAlbumOut)
-async def move(body: TracksMoveIn, user: User = Depends(current_user), s: AsyncSession = Depends(get_session, scope="function")):
+async def move(body: TracksMoveIn, user: User = Depends(admin_user), s: AsyncSession = Depends(get_session, scope="function")):
     target = await _album(s, body.album_id)
     await editor.move_tracks(s, body.track_ids, target)
     await _after_edit(s, user, target.id)
@@ -186,7 +186,7 @@ async def move(body: TracksMoveIn, user: User = Depends(current_user), s: AsyncS
 
 
 @router.patch("/api/library/tracks/{track_id}", response_model=LibTrackOut)
-async def patch_track(track_id: int, body: TrackPatchIn, user: User = Depends(current_user),
+async def patch_track(track_id: int, body: TrackPatchIn, user: User = Depends(admin_user),
                       s: AsyncSession = Depends(get_session, scope="function")):
     t = await s.get(Track, track_id)
     if t is None:
@@ -197,7 +197,7 @@ async def patch_track(track_id: int, body: TrackPatchIn, user: User = Depends(cu
 
 
 @router.delete("/api/library/tracks/{track_id}")
-async def delete_track(track_id: int, user: User = Depends(current_user), s: AsyncSession = Depends(get_session, scope="function")):
+async def delete_track(track_id: int, user: User = Depends(admin_user), s: AsyncSession = Depends(get_session, scope="function")):
     t = await s.get(Track, track_id)
     if t is None:
         raise HTTPException(404, "Трек не найден")

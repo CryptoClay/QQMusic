@@ -81,6 +81,7 @@ def create_app() -> FastAPI:
         imports,
         insights,
         library,
+        library_care,
         listen,
         medialib,
         mixes,
@@ -99,7 +100,7 @@ def create_app() -> FastAPI:
                   openapi_url="/api/openapi.json", redoc_url=None)
     for r in (auth.router, search.router, catalog.router, downloads.router, listen.router, library.router, medialib.router,
               uploads.router, playlists.router, plays.router, mixes.router, wave.router, smart_shuffle.router, imports.router, events.router, system.router, admin.router,
-              insights.router, nextcloud.router, cloud_library.router, music.router):
+              insights.router, nextcloud.router, cloud_library.router, music.router, library_care.router):
         app.include_router(r)
 
     @app.exception_handler(Exception)

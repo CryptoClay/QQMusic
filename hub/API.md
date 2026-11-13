@@ -1,7 +1,7 @@
 # Hub HTTP API
 
 All JSON. Models are in `app/api/schemas.py` (pydantic): field names below match them exactly.
-Auth: cookie `hm_session` (HttpOnly, set by login). Any endpoint except login/healthz returns `401` without it.
+Auth: cookie `qqmusic_session` (HttpOnly, set by login); legacy `hm_session` is accepted during migration. Any endpoint except login/healthz returns `401` without it.
 Errors: `{"detail": "<Russian message>"}` with 4xx/5xx.
 
 ## Auth
@@ -603,3 +603,11 @@ serves the current complete APK for first installs and old clients. New manifest
 the Hub checks paths and sizes when exposing metadata and verifies the file hash before download. Clients select
 only a smaller patch with the exact installed base hash and version, then verify the reconstructed APK against `full`.
 The metadata is optional: clients fall back to the historical full APK when absent.
+
+## Library inspection and reviewed edits
+
+`GET /api/library/health?offset=0&limit=50` is admin-only: Hub-managed file availability, Navidrome links, candidate duplicate tracks and repeated albums. Similar metadata does not establish audio identity.
+
+`POST /api/library/preview` accepts `{action: "track"|"album"|"merge"|"move", id, ids?: number[], fields?: object}`. `id` is the edited record or target album; `ids` are source albums for merge or tracks for move. Returns before/after changes, files, warnings and an encrypted, user-bound token valid for 10 minutes. `POST /api/library/apply` takes `{token}`; returns `{ok, album_id}`. A stale/expired preview or missing file returns 409. Both endpoints require admin. Existing library read endpoints remain available to signed-in users; existing shared-library mutation endpoints require admin, except creating a new album.
+
+See [library maintenance](../docs/library-care.md) for filesystem rollback, backup space and identity guarantees.

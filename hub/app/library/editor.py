@@ -1,7 +1,7 @@
 """Library edits (FR-5): rename albums, move/merge tracks, covers, delete to trash.
 
 Files are retagged and relocated together. Navidrome keeps the song/album ids because its PIDs come from our
-HOMEMUSIC_TRACK_ID / HOMEMUSIC_ALBUM_ID tags, which never change here (album uid changes only on merge/move,
+QQMUSIC_TRACK_ID / QQMUSIC_ALBUM_ID tags, which never change here (album uid changes only on merge/move,
 and then the track is re-linked after the scan by path).
 """
 
@@ -11,6 +11,7 @@ import asyncio
 import logging
 import os
 import shutil
+from contextlib import nullcontext
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 
@@ -68,16 +69,19 @@ async def relocate_track(s: AsyncSession, track: Track, album: Album, *, cover: 
         await asyncio.to_thread(_remove_empty_dirs, old_abs.parent)
 
 
-async def update_album(s: AsyncSession, album: Album, **fields) -> Album:
-    async with library_lock:
+async def update_album(s: AsyncSession, album: Album, *, _locked: bool = False, **fields) -> Album:
+    async with (nullcontext() if _locked else library_lock):
         old_dir = library_abs(album_reldir(album))
+        change_genre = "genre" in fields and fields["genre"] != album.genre
         for k, v in fields.items():
-            if v is not None:
+            if v is not None or k not in {"title", "album_artist"}:
                 setattr(album, k, v)
         new_dir = library_abs(album_reldir(album))
         cover = await asyncio.to_thread((old_dir / "cover.jpg").read_bytes) if (old_dir / "cover.jpg").is_file() else None
         tracks = (await s.execute(select(Track).where(Track.album_id == album.id))).scalars().all()
         for t in tracks:
+            if change_genre:
+                t.genre = album.genre
             await relocate_track(s, t, album, cover=cover)
         if cover and old_dir != new_dir:
             await asyncio.to_thread(_write_cover_file, new_dir, cover)
@@ -102,9 +106,9 @@ async def set_album_cover(s: AsyncSession, album: Album, image: bytes) -> Album:
         return album
 
 
-async def move_tracks(s: AsyncSession, track_ids: list[int], target: Album) -> list[Album]:
+async def move_tracks(s: AsyncSession, track_ids: list[int], target: Album, *, _locked: bool = False) -> list[Album]:
     """Move tracks into `target`; returns source albums that became empty (already deleted)."""
-    async with library_lock:
+    async with (nullcontext() if _locked else library_lock):
         cover = await _album_cover(target)
         tracks = (await s.execute(select(Track).where(Track.id.in_(track_ids)))).scalars().all()
         sources = {t.album_id for t in tracks if t.album_id and t.album_id != target.id}
@@ -126,22 +130,23 @@ async def move_tracks(s: AsyncSession, track_ids: list[int], target: Album) -> l
         return removed
 
 
-async def merge_albums(s: AsyncSession, source_ids: list[int], target: Album) -> Album:
+async def merge_albums(s: AsyncSession, source_ids: list[int], target: Album, *, _locked: bool = False) -> Album:
     ids = (await s.execute(select(Track.id).where(Track.album_id.in_([i for i in source_ids if i != target.id]))))
-    await move_tracks(s, list(ids.scalars()), target)
+    await move_tracks(s, list(ids.scalars()), target, _locked=_locked)
     return target
 
 
-async def update_track(s: AsyncSession, track: Track, **fields) -> Track:
-    async with library_lock:
+async def update_track(s: AsyncSession, track: Track, *, _locked: bool = False, **fields) -> Track:
+    async with (nullcontext() if _locked else library_lock):
         for k, v in fields.items():
-            if v is not None:
+            if v is not None or k not in {"title", "artist"}:
                 setattr(track, k, v)
+        track.fingerprint = fingerprint(track.artist, track.title)
         album = await s.get(Album, track.album_id) if track.album_id else None
         p = library_abs(track.path)
         if album is None:
             if p.is_file():
-                await asyncio.to_thread(tagger.update_tags, p, **{k: v for k, v in fields.items() if v is not None})
+                await asyncio.to_thread(tagger.update_tags, p, **{k: v for k, v in fields.items() if v is not None or k not in {"title", "artist"}})
             await s.flush()
             return track
         await relocate_track(s, track, album, cover=await _album_cover(album))

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api, libraryCoverUrl, withQuery } from '../api/client';
 import type { LibAlbumOut, ReleaseType } from '../api/types';
 import { Icon, type IconName } from '../components/Icon';
@@ -16,6 +16,7 @@ const PAGE = 50;
 
 export function LibraryPage({ initialQuery }: { initialQuery: string }) {
   const [q, setQ] = useState(initialQuery);
+  const generation = useRef(0);
   const dq = useDebounced(q.trim(), 350);
   const [extra, setExtra] = useState<LibAlbumOut[]>([]);
   const [more, setMore] = useState<{ busy: boolean; done: boolean }>({ busy: false, done: false });
@@ -27,22 +28,26 @@ export function LibraryPage({ initialQuery }: { initialQuery: string }) {
   const offerImport = imports.data?.length === 0 && !dq;
 
   useEffect(() => {
+    generation.current++;
     setExtra([]);
     setMore({ busy: false, done: false });
     const target = withQuery('/library', { q: dq });
     if (window.location.hash !== '#' + target) navigate(target, { replace: true });
+    return () => { generation.current++; };
   }, [dq]);
 
-  useHubEvent('library', () => res.reload(true));
+  useHubEvent('library', () => { generation.current++; setExtra([]); setMore({busy:false,done:false}); res.reload(true); });
 
   const albums = [...(res.data ?? []), ...extra];
   const canMore = !more.done && (res.data?.length ?? 0) >= PAGE;
 
   const loadMore = async () => {
+    const current = generation.current;
     setMore({ busy: true, done: false });
     const next = await attempt(() => api.libAlbums(dq, albums.length, PAGE));
-    setExtra((x) => [...x, ...(next ?? [])]);
-    setMore({ busy: false, done: !next || next.length < PAGE });
+    if (current !== generation.current) return;
+    if (next) setExtra((x) => [...x, ...next]);
+    setMore({ busy: false, done: !!next && next.length < PAGE });
   };
 
   if (desktop) {

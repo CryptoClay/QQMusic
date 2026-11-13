@@ -91,10 +91,10 @@ export function MorePage() {
           <Item icon="bell" title="Уведомления" sub={permText[perm]} onClick={perm === 'default' ? enableNotifications : undefined} right={perm === 'granted' ? <Icon name="check" size={20} className="text-accent" /> : undefined} />
         </SettingsGroup>
         <SettingsGroup title="Музыка и устройства">
+          {me.is_admin && <Item icon="library" to="/library-health" title="Проверка библиотеки" sub="Дубли, отсутствующие файлы и исправление тегов" />}
           <Item icon="upload" to="/upload" title="Загрузить файлы" sub="Добавить аудиофайлы в библиотеку" />
           <Item icon="library" to="/nextcloud" title="Nextcloud" sub="Личная музыка из вашего облака" />
           <Item icon="transfer" to="/import" title="Перенести музыку" sub="Из Яндекс Музыки: избранное, плейлисты и альбомы" />
-          <Item icon="install" href="/app/latest.apk" title="Приложение для Android" sub="Офлайн, плеер в шторке, тот же аккаунт" />
           {canInstall && !standalone && <Item icon="install" title="Установить приложение" sub="На домашний экран" onClick={install} />}
         </SettingsGroup>
         {(me.is_admin || me.public_music_url) && <SettingsGroup title="Сервис">
@@ -136,13 +136,13 @@ export function MorePage() {
             right={<Switch on={smart} />}
           />
         )}
+        {me.is_admin && <Item icon="library" to="/library-health" title="Проверка библиотеки" sub="Дубли, файлы и теги" />}
         <Item icon="upload" to="/upload" title="Загрузить файлы" sub="Добавить свои аудиофайлы в библиотеку" />
         <Item icon="library" to="/nextcloud" title="Nextcloud" sub="Личная музыка из вашего облака" />
         <Item icon="playlist" to="/playlists" title="Плейлисты" sub="Ваши плейлисты в Navidrome" />
         <Item icon="transfer" to="/import" title="Перенести музыку" sub="Из Яндекс Музыки: ♥, плейлисты, альбомы" />
         {me.is_admin && <Item icon="user" to="/admin" title="Пользователи и приглашения" sub="Пользователи, песни и коды приглашений" />}
         {/* the player is here: in the browser, and the app's own on Android */}
-        <Item icon="install" href="/app/latest.apk" title="Приложение для Android" sub="Офлайн, плеер в шторке, тот же аккаунт" />
         {me.public_music_url && <Item icon="external" href={me.public_music_url} title="Navidrome" sub="Веб-интерфейс библиотеки" />}
         <Item
           icon="bell"

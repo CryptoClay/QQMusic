@@ -5,6 +5,8 @@ import { Icon } from '../components/Icon';
 import { AlbumPicker } from '../components/pickers';
 import { Button, Checkbox, Cover, ErrorState, ExplicitBadge, Field, IconButton, Loading, PageHeader, SectionTitle, Sheet, cx } from '../components/ui';
 import { fmtDuration, fmtLength, providerLabel, toIntOrNull, tracksWord, warningText } from '../lib/format';
+import { useLibraryReview } from '../lib/libraryCare';
+import { useSession } from '../lib/session';
 import { useAsync } from '../lib/hooks';
 import { LikeButton } from '../components/LikeButton';
 import { TrackMenuButton } from '../components/TrackMenu';
@@ -17,6 +19,9 @@ import { ReleaseTypeSelect } from './Library';
 const RELEASE_TYPES: ReleaseType[] = ['album', 'single', 'ep', 'compilation'];
 
 export function LibraryAlbumPage({ id }: { id: number }) {
+  const { me } = useSession();
+  const canEdit = me.is_admin;
+  const { review, sheet } = useLibraryReview();
   const res = useAsync((s) => api.libAlbum(id, s), [id]);
   const [coverRev, setCoverRev] = useState(() => Date.now());
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -69,7 +74,7 @@ export function LibraryAlbumPage({ id }: { id: number }) {
     if (picker === 'move') {
       const ids = [...selected];
       setPickBusy(true);
-      const r = await attempt(() => api.moveTracks({ track_ids: ids, album_id: target.id }), `Перенесено в «${target.title}»: ${tracksWord(ids.length)}`);
+      const r = await attempt(() => review({ action: 'move', id: target.id, ids }), `Перенесено в «${target.title}»: ${tracksWord(ids.length)}`);
       setPickBusy(false);
       if (r) {
         setPicker(null);
@@ -77,18 +82,12 @@ export function LibraryAlbumPage({ id }: { id: number }) {
         res.reload(true);
       }
     } else if (picker === 'merge') {
-      const choice = await confirmDialog({
-        title: 'Объединить альбомы?',
-        body: `Все треки из «${album.title}» перейдут в «${target.title}» (его название, обложка и теги сохранятся). Альбом «${album.title}» исчезнет.`,
-        okLabel: 'Объединить',
-      });
-      if (!choice) return;
       setPickBusy(true);
-      const r = await attempt(() => api.mergeAlbums({ source_ids: [album.id], target_id: target.id }), 'Альбомы объединены');
+      const r = await attempt(() => review({ action: 'merge', id: target.id, ids: [album.id] }), 'Альбомы объединены');
       setPickBusy(false);
       if (r) {
         setPicker(null);
-        navigate(`/library/album/${r.id}`, { replace: true });
+        navigate(`/library/album/${r.album_id}`, { replace: true });
       }
     }
   };
@@ -119,7 +118,7 @@ export function LibraryAlbumPage({ id }: { id: number }) {
             <LikeButton targetType="album" ndId={album.nd_album_id}
               refId={album.deezer_album_id ? `dz:${album.deezer_album_id}` : null}
               title={album.title} data={{ name: album.title, artist: album.album_artist }} />
-            <IconButton icon="merge" label="Объединить с другим альбомом" onClick={() => setPicker('merge')} />
+            {canEdit && <IconButton icon="merge" label="Объединить с другим альбомом" onClick={() => setPicker('merge')} />}
           </>
         }
       />
@@ -136,7 +135,7 @@ export function LibraryAlbumPage({ id }: { id: number }) {
 
       <SectionTitle
         right={
-          tracks.length > 0 && (
+          canEdit && tracks.length > 0 && (
             <Button small variant="ghost" onClick={() => setSelected(allSelected ? new Set() : new Set(tracks.map((t) => t.id)))}>
               {allSelected ? 'Снять выбор' : 'Выбрать все'}
             </Button>
@@ -160,8 +159,8 @@ export function LibraryAlbumPage({ id }: { id: number }) {
         <ul>
           {tracks.map((t) => (
             <li key={t.id} className={cx('flex items-center pr-1', selected.has(t.id) && 'bg-accent/5')}>
-              <Checkbox checked={selected.has(t.id)} onChange={(v) => toggle(t.id, v)} label={`Выбрать «${t.title}»`} />
-              <button type="button" className="flex min-w-0 flex-1 items-center gap-2 py-2 text-left" onClick={() => setEditTrack(t)} aria-label={`Изменить теги «${t.title}»`}>
+              {canEdit && <Checkbox checked={selected.has(t.id)} onChange={(v) => toggle(t.id, v)} label={`Выбрать «${t.title}»`} />}
+              <button type="button" className="flex min-w-0 flex-1 items-center gap-2 py-2 text-left" onClick={() => canEdit ? setEditTrack(t) : t.nd_song_id && playFrom(t)} aria-label={`${canEdit ? "Изменить теги" : "Слушать"} «${t.title}»`}>
                 <span className="w-6 shrink-0 text-center text-sm tabular-nums text-dim">{t.track_no ?? '–'}</span>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-1.5">
@@ -192,7 +191,7 @@ export function LibraryAlbumPage({ id }: { id: number }) {
               {playable.includes(t) && (
                 <IconButton icon="play" label={`Слушать «${t.title}»`} className="!text-accent" size={20} onClick={() => playFrom(t)} />
               )}
-              <IconButton icon="trash" label={`Удалить «${t.title}»`} className="text-dim hover:text-danger" size={20} onClick={() => deleteTrack(t)} />
+              {canEdit && <IconButton icon="trash" label={`Удалить «${t.title}»`} className="text-dim hover:text-danger" size={20} onClick={() => deleteTrack(t)} />}
               {t.nd_song_id && <TrackMenuButton track={{ title: t.title, artist: t.artist, nd_song_id: t.nd_song_id }} className="-ml-2 w-8" />}
             </li>
           ))}
@@ -209,6 +208,7 @@ export function LibraryAlbumPage({ id }: { id: number }) {
         </div>
       )}
 
+      {sheet}
       <AlbumPicker
         open={picker !== null}
         onClose={() => setPicker(null)}
@@ -242,6 +242,8 @@ function AlbumForm({
   onSaved: (a: LibAlbumOut) => void;
   onCover: (a: LibAlbumOut) => void;
 }) {
+  const { me } = useSession();
+  const { review, sheet } = useLibraryReview();
   const [title, setTitle] = useState(album.title);
   const [artist, setArtist] = useState(album.album_artist);
   const [year, setYear] = useState(album.year ? String(album.year) : '');
@@ -256,7 +258,8 @@ function AlbumForm({
     setArtist(album.album_artist);
     setYear(album.year ? String(album.year) : '');
     setGenre(album.genre ?? '');
-  }, [album.id, album.title, album.album_artist, album.year, album.genre]);
+    setType(RELEASE_TYPES.includes(album.release_type as ReleaseType) ? album.release_type as ReleaseType : 'album');
+  }, [album.id, album.title, album.album_artist, album.year, album.genre, album.release_type]);
 
   const dirty =
     title.trim() !== album.title ||
@@ -268,7 +271,7 @@ function AlbumForm({
   const save = async () => {
     setBusy(true);
     const r = await attempt(
-      () => api.patchAlbum(album.id, { title: title.trim(), album_artist: artist.trim(), year: toIntOrNull(year), genre: genre.trim() || null, release_type: type }),
+      async () => { const applied = await review({ action: 'album', id: album.id, fields: { title: title.trim(), album_artist: artist.trim(), year: toIntOrNull(year), genre: genre.trim() || null, release_type: type } }); return applied ? api.libAlbum(album.id) : null; },
       'Сохранено',
     );
     setBusy(false);
@@ -287,8 +290,11 @@ function AlbumForm({
     if (r) onCover(r);
   };
 
+  if (!me.is_admin) return <div className="flex items-center gap-4 px-4 pb-4"><Cover src={coverSrc} alt="Обложка" className="h-28 w-28 shrink-0" icon="disc" /><p className="text-sm text-muted">{[album.year, album.genre, album.release_type].filter(Boolean).join(' · ')}</p></div>;
+
   return (
     <div className="px-4">
+      {sheet}
       <div className="flex gap-4">
         <div className="relative w-32 shrink-0">
           <Cover src={coverSrc} alt="Обложка" className="aspect-square w-full" icon="disc" />
@@ -320,7 +326,7 @@ function AlbumForm({
       {dirty && (
         <div className="mt-3 flex justify-end">
           <Button variant="primary" small icon="check" busy={busy} disabled={!title.trim() || !artist.trim()} onClick={save}>
-            Сохранить
+            Проверить изменения
           </Button>
         </div>
       )}
@@ -329,12 +335,13 @@ function AlbumForm({
 }
 
 function TrackEditSheet({ track, onClose, onSaved }: { track: LibTrackOut | null; onClose: () => void; onSaved: (t: LibTrackOut) => void }) {
+  const { review, sheet } = useLibraryReview();
   const [title, setTitle] = useState('');
   const [artist, setArtist] = useState('');
   const [trackNo, setTrackNo] = useState('');
   const [discNo, setDiscNo] = useState('');
   const [genre, setGenre] = useState('');
-  const [explicit, setExplicit] = useState(false);
+  const [explicit, setExplicit] = useState('unknown');
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -343,8 +350,8 @@ function TrackEditSheet({ track, onClose, onSaved }: { track: LibTrackOut | null
     setArtist(track.artist);
     setTrackNo(track.track_no ? String(track.track_no) : '');
     setDiscNo(track.disc_no ? String(track.disc_no) : '');
-    setGenre('');
-    setExplicit(!!track.explicit);
+    setGenre(track.genre ?? '');
+    setExplicit(track.explicit == null ? 'unknown' : String(track.explicit));
   }, [track]);
 
   const save = async () => {
@@ -352,14 +359,14 @@ function TrackEditSheet({ track, onClose, onSaved }: { track: LibTrackOut | null
     setBusy(true);
     const r = await attempt(
       () =>
-        api.patchTrack(track.id, {
+        review({ action: 'track', id: track.id, fields: {
           title: title.trim(),
           artist: artist.trim(),
           track_no: toIntOrNull(trackNo),
           disc_no: toIntOrNull(discNo),
-          genre: genre.trim() || undefined,
-          explicit,
-        }),
+          genre: genre.trim() || null,
+          explicit: explicit === 'unknown' ? null : explicit === 'true',
+        } }).then(async (result) => result ? (await api.libAlbum(track.album_id!)).tracks?.find(t => t.id === track.id) ?? null : null),
       'Теги сохранены',
     );
     setBusy(false);
@@ -367,13 +374,14 @@ function TrackEditSheet({ track, onClose, onSaved }: { track: LibTrackOut | null
   };
 
   return (
+    <>
     <Sheet
       open={!!track}
       onClose={onClose}
       title="Теги трека"
       footer={
         <Button variant="primary" block busy={busy} disabled={!title.trim() || !artist.trim()} onClick={save}>
-          Сохранить
+          Проверить изменения
         </Button>
       }
     >
@@ -392,15 +400,14 @@ function TrackEditSheet({ track, onClose, onSaved }: { track: LibTrackOut | null
             <input className="input" inputMode="numeric" value={discNo} onChange={(e) => setDiscNo(e.target.value.replace(/\D/g, ''))} />
           </Field>
           <Field label="Жанр">
-            <input className="input" value={genre} onChange={(e) => setGenre(e.target.value)} placeholder="без изм." />
+            <input className="input" value={genre} onChange={(e) => setGenre(e.target.value)} placeholder="Не задано" />
           </Field>
         </div>
-        <label className="flex min-h-11 items-center gap-3">
-          <input type="checkbox" className="h-5 w-5 accent-[#1ed760]" checked={explicit} onChange={(e) => setExplicit(e.target.checked)} />
-          <span>Explicit (18+)</span>
-        </label>
+        <Field label="Содержание 18+"><select className="input" value={explicit} onChange={(e) => setExplicit(e.target.value)}><option value="unknown">Не указано</option><option value="true">Да</option><option value="false">Нет</option></select></Field>
         {track && <p className="break-all text-xs text-dim">{track.path}</p>}
       </div>
     </Sheet>
+    {sheet}
+    </>
   );
 }

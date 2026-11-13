@@ -225,6 +225,7 @@ export interface LibTrackOut {
   duration_s: number | null;
   bitrate_kbps: number | null;
   codec: string | null;
+  genre?: string | null;
   explicit: boolean | null;
   source: string | null;
   locked: boolean;
