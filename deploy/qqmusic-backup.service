@@ -1,0 +1,12 @@
+[Unit]
+Description=QQMusic encrypted backup with a maintenance window
+Requires=docker.service
+After=docker.service
+ConditionPathExists=/etc/qqmusic/backup.json
+ConditionPathExists=/etc/qqmusic/backup.key
+
+[Service]
+Type=oneshot
+UMask=0077
+ExecStart=/usr/bin/python3 /opt/qqmusic/scripts/backup_job.py --config /etc/qqmusic/backup.json --run
+TimeoutStartSec=6h

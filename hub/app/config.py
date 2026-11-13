@@ -152,6 +152,8 @@ class Settings(BaseSettings):
 
     public_music_url: str = ""
     public_hub_url: str = ""
+    public_mode: bool = False
+    public_login_limit: int = Field(default=10, ge=1, le=100)
 
     hub_secret_key: str = ""
     session_days: int = 60

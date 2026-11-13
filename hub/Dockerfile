@@ -4,7 +4,7 @@
 FROM node:22.20.0-bookworm-slim AS web
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json* ./
-RUN npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+RUN npm ci --no-audit --no-fund
 COPY web/ ./
 RUN npm run build
 

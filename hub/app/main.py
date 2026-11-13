@@ -28,6 +28,8 @@ def _import_handlers() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     s = get_settings()
+    from app.web_guard import validate_public_settings
+    validate_public_settings(s)
     setup_logging(s.log_level)
     for d in (s.library_dir, s.staging_dir, s.trash_dir, s.backups_dir):
         d.mkdir(parents=True, exist_ok=True)
@@ -107,6 +109,9 @@ def create_app() -> FastAPI:
               uploads.router, playlists.router, plays.router, mixes.router, wave.router, smart_shuffle.router, imports.router, events.router, system.router, admin.router,
               insights.router, nextcloud.router, cloud_library.router, music.router, library_care.router, community.router, devices.router, sharing.router, experience.router, remote_player.router):
         app.include_router(r)
+
+    from app.web_guard import WebGuard
+    app.add_middleware(WebGuard)
 
     @app.exception_handler(Exception)
     async def unhandled(request: Request, exc: Exception):

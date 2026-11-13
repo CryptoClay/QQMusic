@@ -67,6 +67,10 @@ def test_full_recovery_with_wal_and_encrypted_connections(tmp_path, recovery):
     assert b"private test cookies" not in archive.read_bytes()
     result = recovery.restore(archive, tmp_path / "restored", "long backup passphrase")
     assert result["library_files"] == 1 and result["decrypted_secrets"] == 4
+    assert recovery.verify(tmp_path / "restored") == result
+    assert recovery.verify(tmp_path / "restored") == result
+    assert not list((tmp_path / "restored").rglob("*-wal"))
+    assert not list((tmp_path / "restored").rglob("*-shm"))
     assert (tmp_path / "restored/music/library/song.mp3").read_bytes() == b"media" * 10000
     with pytest.raises(ValueError):
         recovery.restore(archive, tmp_path / "restored", "long backup passphrase")

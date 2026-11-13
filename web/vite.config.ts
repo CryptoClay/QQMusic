@@ -4,7 +4,6 @@ import tailwindcss from '@tailwindcss/vite';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { mockApi } from './mock/plugin.ts';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const outDir = resolve(here, '../hub/app/static');
@@ -26,10 +25,8 @@ function buildId(): Plugin {
   };
 }
 
-const backend = process.env.QQMUSIC_DEV_BACKEND ?? 'http://localhost:8081';
-
 export default defineConfig(({ command, mode }) => ({
-  plugins: [react(), tailwindcss(), buildId(), ...(mode === 'mock' ? [mockApi()] : [])],
+  plugins: [react(), tailwindcss(), buildId()],
   define: { __QQMUSIC_BUILD__: JSON.stringify(command === 'build' ? BUILD_ID : 'dev') },
   build: {
     outDir,
@@ -40,12 +37,10 @@ export default defineConfig(({ command, mode }) => ({
   server: {
     port: 5173,
     proxy:
-      mode === 'mock'
-        ? undefined
-        : {
-            '/api': { target: backend, changeOrigin: false },
-            '/share-target': { target: backend, changeOrigin: false },
-            '/healthz': { target: backend, changeOrigin: false },
+      {
+            '/api': { target: process.env.QQMUSIC_DEV_BACKEND ?? (mode === 'acceptance' ? 'http://127.0.0.1:18082' : 'http://localhost:8081'), changeOrigin: false },
+            '/share-target': { target: process.env.QQMUSIC_DEV_BACKEND ?? (mode === 'acceptance' ? 'http://127.0.0.1:18082' : 'http://localhost:8081'), changeOrigin: false },
+            '/healthz': { target: process.env.QQMUSIC_DEV_BACKEND ?? (mode === 'acceptance' ? 'http://127.0.0.1:18082' : 'http://localhost:8081'), changeOrigin: false },
           },
   },
 }));

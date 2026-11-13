@@ -1074,8 +1074,8 @@ function mediaSession(track: ListenTrack) {
   };
   action('play', resume);
   action('pause', pause);
-  action('seekbackward', d => seek(Math.max(0, state.position - (d.seekOffset ?? 10))));
-  action('seekforward', d => seek(Math.min(state.duration, state.position + (d.seekOffset ?? 10))));
+  action('seekbackward', null);
+  action('seekforward', null);
   action('seekto', (d) => d.seekTime !== undefined && seek(d.seekTime));
   action('nexttrack', hasNext(state) || state.repeat === 'all' ? () => void next() : null);
   action('previoustrack', prev);

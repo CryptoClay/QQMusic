@@ -4,10 +4,9 @@ import { useActiveDownloads } from '../lib/notify';
 import { Icon, type IconName } from './Icon';
 import { cx } from './ui';
 
-export type Tab = 'home' | 'search' | 'downloads' | 'library' | 'assistant' | 'more';
+export type Tab = 'home' | 'search' | 'downloads' | 'library' | 'more';
 
-/** Only a plain browser draws it (inside the app the app's tabs open the routes): the whole service, «Главная»
- * first, the assistant under «Ещё». */
+/** Browser navigation; the embedded app draws its own tabs. */
 const TABS: Array<{ id: Tab; to: string; label: string; icon: IconName }> = [
   { id: 'home', to: '/home', label: 'Главная', icon: 'home' },
   { id: 'search', to: '/search', label: 'Поиск', icon: 'search' },
@@ -16,7 +15,7 @@ const TABS: Array<{ id: Tab; to: string; label: string; icon: IconName }> = [
   { id: 'more', to: '/more', label: 'Ещё', icon: 'more' },
 ];
 
-/** The tab a route's own tab shows under: the assistant lives in «Ещё» of a browser. */
+/** Unknown sections fall back to «Ещё». */
 const shownTab = (t: Tab | null): Tab | null => (t && !TABS.some((x) => x.id === t) ? 'more' : t);
 
 export function TabBar({ active: routeTab, last }: { active: Tab | null; last: Partial<Record<Tab, string>> }) {

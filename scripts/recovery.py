@@ -197,7 +197,7 @@ def verify(destination: Path) -> dict:
             raise ValueError("Recovery file checksum mismatch")
     databases = {}
     for name, relative in [("hub", "hub/hub.sqlite3"), ("navidrome", "navidrome/navidrome.db")]:
-        with sqlite3.connect((destination / relative).resolve().as_uri() + "?mode=ro", uri=True) as db:
+        with sqlite3.connect((destination / relative).resolve().as_uri() + "?mode=ro&immutable=1", uri=True) as db:
             if db.execute("PRAGMA integrity_check").fetchall() != [("ok",)]:
                 raise ValueError("SQLite integrity check failed")
             databases[name] = len(db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall())
@@ -207,7 +207,7 @@ def verify(destination: Path) -> dict:
     values = dotenv_values(destination / "settings/.env")
     cipher = Fernet(values["HUB_SECRET_KEY"].encode())
     decrypted = 0
-    with sqlite3.connect(destination / "hub/hub.sqlite3") as db:
+    with sqlite3.connect((destination / "hub/hub.sqlite3").resolve().as_uri() + "?mode=ro&immutable=1", uri=True) as db:
         tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         for table, column in [("users", "nd_password_enc"), ("nextcloud_connections", "password_enc"),
                               ("share_links", "token_enc")]:

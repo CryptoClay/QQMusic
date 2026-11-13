@@ -47,3 +47,12 @@ OPTIMIZE-TODO.md
 OPTIMIZE-DONE.md
 design-review/
 design-preview/
+
+# Browser acceptance output
+web/test-results/
+web/playwright-report/
+reports/
+
+tools/legacy-recognition/screenshots/
+tools/legacy-recognition/results/
+tools/legacy-recognition/expected.json

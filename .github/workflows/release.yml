@@ -1,0 +1,40 @@
+name: Draft release candidate
+on:
+  workflow_dispatch:
+    inputs:
+      checks_run:
+        description: Successful Release checks run on this exact commit, including two-hour soak
+        required: true
+        type: string
+permissions:
+  contents: write
+  actions: read
+jobs:
+  candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Validate completed checks on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHECKS_RUN: ${{ inputs.checks_run }}
+        run: |
+          python - <<'PY'
+          import json, os, subprocess
+          run = os.environ['CHECKS_RUN']
+          assert run.isdigit(), 'Numeric run id required'
+          data = json.loads(subprocess.check_output(['gh','api','repos/'+os.environ['GITHUB_REPOSITORY']+'/actions/runs/'+run]))
+          assert data['head_sha'] == os.environ['GITHUB_SHA'], 'Checks belong to another commit'
+          assert data['conclusion'] == 'success' and data['path'] == '.github/workflows/ci.yml', 'Release checks must pass'
+          PY
+          gh run download "$CHECKS_RUN" --name two-hour-soak --dir reports/soak
+      - name: Build source archive and checksums
+        run: python scripts/package_release.py --soak-report reports/soak/soak-report.json
+      - name: Create reviewable prerelease draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(cat VERSION)
+          case "$VERSION" in *-rc.*) ;; *) echo 'This workflow only creates candidates'; exit 1;; esac
+          gh release create "v$VERSION" --target "$GITHUB_SHA" --draft --prerelease --title "QQMusic $VERSION" --notes-file CHANGELOG.md reports/package/*

@@ -1,0 +1,36 @@
+# Docker Compose 2.24.4+; combine with docker-compose.yml. Only Caddy faces the Internet.
+services:
+  hub:
+    ports: !override
+      - "127.0.0.1:8081:8080"
+    environment:
+      PUBLIC_MODE: "true"
+      PUBLIC_HUB_URL: https://${QQM_DOMAIN:?set QQM_DOMAIN}
+      PUBLIC_MUSIC_URL: ""
+  navidrome:
+    ports: !override
+      - "127.0.0.1:4533:4533"
+  caddy:
+    image: caddy:2.11.9-alpine@sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20faefb9f61126836f0
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      QQM_DOMAIN: ${QQM_DOMAIN:?set QQM_DOMAIN}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      hub:
+        condition: service_healthy
+    logging:
+      driver: local
+      options:
+        max-size: "5m"
+        max-file: "3"
+volumes:
+  caddy-data:
+  caddy-config:

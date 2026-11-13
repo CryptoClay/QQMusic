@@ -1,0 +1,15 @@
+{$QQM_DOMAIN} {
+    encode zstd gzip
+    header {
+        X-Content-Type-Options nosniff
+        Referrer-Policy strict-origin-when-cross-origin
+        -Server
+    }
+    @auth path /api/auth/*
+    request_body @auth {
+        max_size 64KB
+    }
+    reverse_proxy hub:8080 {
+        flush_interval -1
+    }
+}

@@ -1,6 +1,6 @@
-"""Screenshot recognition eval (PLAN.md 9, step 3.7): precision / recall of recognized rows vs. expected rows.
+"""Legacy screenshot recognition evaluation: precision / recall of recognized rows vs. expected rows.
 
-Usage (from hub/):  uv run python ../eval/run_eval.py [--only NAME ...] [--threshold 0.85] [--no-save]
+Usage (from hub/):  uv run python ../tools/legacy-recognition/run_eval.py [--only NAME ...] [--threshold 0.85] [--no-save]
 
 Reads eval/expected.json ({"<file name>": {"source_app": "...", "items": [{"artist": "...", "title": "..."}]}}),
 runs `extract_from_images` on eval/screenshots/<file name> and prints per-file and total precision/recall and cost.
@@ -19,7 +19,7 @@ from datetime import datetime
 from pathlib import Path
 
 EVAL_DIR = Path(__file__).resolve().parent
-ROOT = EVAL_DIR.parent
+ROOT = EVAL_DIR.parents[1]
 sys.path.insert(0, str(ROOT / "hub"))
 
 

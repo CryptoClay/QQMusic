@@ -137,7 +137,7 @@ test('one unsupported lock-screen action does not disable other controls', async
   vm.runInContext(stripTypeScriptTypes(fn + '\nmediaSession({title:"Song",artist:"Band"});'), context);
   assert.ok(handlers.has('nexttrack'));
   assert.ok(handlers.has('previoustrack'));
-  handlers.get('seekforward')({});
+  assert.equal(handlers.get('seekforward'), null);
   handlers.get('seekto')({ seekTime: 77 });
-  assert.deepEqual(seeks, [52, 77]);
+  assert.deepEqual(seeks, [77]);
 });

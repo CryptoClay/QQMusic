@@ -17,3 +17,7 @@ android
 design-review
 design-preview
 gateway/tunnel/tunnel_key*
+
+web/test-results
+web/playwright-report
+reports

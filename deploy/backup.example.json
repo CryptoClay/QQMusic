@@ -1,0 +1,9 @@
+{
+  "project": "/opt/qqmusic",
+  "destination": "/mnt/offsite/qqmusic",
+  "passphrase_file": "/etc/qqmusic/backup.key",
+  "hub_container": "qqmusic_hub",
+  "navidrome_container": "qqmusic_navidrome",
+  "image": "qqmusic-hub:local",
+  "keep": 7
+}
