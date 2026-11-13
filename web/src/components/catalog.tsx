@@ -167,7 +167,7 @@ export function TrackRow({
   );
   const rowClass = cx('flex min-w-0 flex-1 items-center gap-3 py-2 text-left', rowPlays && 'cursor-pointer');
   return (
-    <div ref={rowRef} className={cx('flex min-h-16 items-center gap-3 pl-4 pr-1', rowPlays && 'group/track transition-colors hover:bg-fg/5 focus-within:bg-fg/5')}>
+    <div data-reveal ref={rowRef} className={cx('flex min-h-16 items-center gap-3 pl-4 pr-1', rowPlays && 'group/track transition-colors hover:bg-fg/5 focus-within:bg-fg/5')}>
       {!track.owned ? (
         <button type="button" onClick={listenHere} onPointerDown={() => touchTrack(track.ref)} className={rowClass} aria-label={rowPlays ? playLabel : `Послушать «${track.title}»`}>
           {body}
@@ -216,7 +216,7 @@ export function TrackRow({
 
 export function ArtistBubble({ artist }: { artist: CatalogArtist }) {
   return (
-    <Link to={`/artist/${enc(artist.ref)}`} className="flex w-28 shrink-0 flex-col items-center gap-2 text-center">
+    <Link data-reveal to={`/artist/${enc(artist.ref)}`} className="flex w-28 shrink-0 flex-col items-center gap-2 text-center">
       <Cover src={artist.picture_small_url || artist.picture_url} size={104} round icon="user" alt={artist.name} />
       <span className="line-clamp-2 text-sm leading-tight">{artist.name}</span>
     </Link>
@@ -227,7 +227,7 @@ export function ArtistBubble({ artist }: { artist: CatalogArtist }) {
 export function ReleaseCard({ album, showArtist = false, onDownload, busy }: { album: AlbumOut; showArtist?: boolean; onDownload?: () => void; busy?: boolean }) {
   const year = yearOf(album);
   return (
-    <div className="relative min-w-0">
+    <div data-reveal className="relative min-w-0">
       <Link to={`/album/${enc(album.ref)}`} className="block">
         <Cover src={album.cover_small_url || album.cover_url} alt={album.title} className="aspect-square w-full" />
         <div className="mt-2 line-clamp-2 text-sm font-medium leading-tight">

@@ -1,4 +1,5 @@
 // A tiny hash router: FastAPI only has to serve index.html, everything after "#" is client side.
+import { flushSync } from 'react-dom';
 import { useMemo, useSyncExternalStore, type AnchorHTMLAttributes, type MouseEvent } from 'react';
 
 /** Fired by `navigate()` (pushState does not fire `hashchange`). */
@@ -42,19 +43,52 @@ const idx = (): number => {
   return typeof st?.idx === 'number' ? st.idx : 0;
 };
 
+let activeTransition: ViewTransition | null = null;
+
 export function navigate(to: string, opts: { replace?: boolean } = {}) {
   const target = '#' + to;
   const previousPath = parseHash(window.location.hash).path;
-  if (opts.replace) {
-    window.history.replaceState({ idx: idx() }, '', target);
-  } else if (window.location.hash !== target) {
-    window.history.pushState({ idx: idx() + 1 }, '', target);
-  } else {
+  const commit = () => {
+    if (opts.replace) {
+      window.history.replaceState({ idx: idx() }, '', target);
+    } else if (window.location.hash !== target) {
+      window.history.pushState({ idx: idx() + 1 }, '', target);
+    } else {
+      return;
+    }
+    window.dispatchEvent(new Event(ROUTE_EVENT));
+    // Debounced search updates only replace the query: keep the user's scroll position.
+    if (!opts.replace || previousPath !== parseHash(target).path) window.scrollTo(0, 0);
+  };
+  const animate =
+    previousPath !== parseHash(target).path &&
+    typeof document.startViewTransition === 'function' &&
+    !window.matchMedia('(prefers-reduced-motion: reduce)').matches &&
+    !document.hidden;
+  if (!animate) {
+    commit();
     return;
   }
-  window.dispatchEvent(new Event(ROUTE_EVENT));
-  // Debounced search updates only replace the query: keep the user's scroll position.
-  if (!opts.replace || previousPath !== parseHash(target).path) window.scrollTo(0, 0);
+  activeTransition?.skipTransition();
+  document.documentElement.classList.add('route-transitioning');
+  let transition: ViewTransition;
+  try {
+    transition = document.startViewTransition(() => flushSync(commit));
+  } catch {
+    activeTransition = null;
+    document.documentElement.classList.remove('route-transitioning');
+    commit();
+    return;
+  }
+  activeTransition = transition;
+  void transition.finished
+    .catch(() => {})
+    .finally(() => {
+      if (activeTransition === transition) {
+        activeTransition = null;
+        document.documentElement.classList.remove('route-transitioning');
+      }
+    });
 }
 
 /** Go back if we have in-app history, otherwise to `fallback`. */

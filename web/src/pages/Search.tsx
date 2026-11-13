@@ -425,7 +425,7 @@ function LibraryTrackRow({ t, onPlay }: { t: LibTrackOut; onPlay?: () => void })
     <div className="flex min-h-16 min-w-0 flex-1 items-center gap-3 py-2 pl-4">{inner}</div>
   );
   return (
-    <div className="flex items-center pr-1">
+    <div data-reveal className="flex items-center pr-1">
       {row}
       {t.nd_song_id && <TrackMenuButton track={{ title: t.title, artist: t.artist, nd_song_id: t.nd_song_id }} />}
       <LikeButton songId={t.nd_song_id} title={t.title} className={cx('w-10', !onPlay && 'mr-1')} />

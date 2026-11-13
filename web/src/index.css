@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 @import './home-motion.css';
+@import './interface-motion.css';
 
 @theme {
   --color-bg: #0b0b0b;

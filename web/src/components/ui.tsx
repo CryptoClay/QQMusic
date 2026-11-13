@@ -345,6 +345,14 @@ let sheetOverflow = '';
 
 export function Sheet({ open, onClose, title, children, footer }: { open: boolean; onClose: () => void; title: string; children: ReactNode; footer?: ReactNode }) {
   const id = useId();
+  const [present, setPresent] = useState(open);
+  const content = useRef(children);
+  if (open) content.current = children;
+  useEffect(() => {
+    if (open) { setPresent(true); return; }
+    const timer = window.setTimeout(() => setPresent(false), window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 160);
+    return () => window.clearTimeout(timer);
+  }, [open]);
   const [layer, setLayer] = useState(50);
   const panel = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
@@ -384,16 +392,16 @@ export function Sheet({ open, onClose, title, children, footer }: { open: boolea
       }
     };
   }, [open, id]);
-  if (!open) return null;
+  if (!open && !present) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" style={{ zIndex: layer }} role="dialog" aria-modal="true" aria-label={title}>
-      <button type="button" aria-label="Закрыть" className="absolute inset-0 bg-black/70" onClick={onClose} />
-      <div ref={panel} tabIndex={-1} className="anim-up pb-safe relative flex max-h-[88dvh] w-full max-w-lg flex-col rounded-t-2xl bg-surface sm:rounded-2xl">
+    <div className="sheet-motion fixed inset-0 z-50 flex items-end justify-center sm:items-center" data-closing={!open || undefined} inert={!open} aria-hidden={!open || undefined} style={{ zIndex: layer, pointerEvents: open ? undefined : 'none' }} role="dialog" aria-modal={open || undefined} aria-label={title}>
+      <button type="button" aria-label="Закрыть" className="sheet-backdrop absolute inset-0 bg-black/70" onClick={onClose} />
+      <div ref={panel} tabIndex={-1} className="sheet-panel pb-safe relative flex max-h-[88dvh] w-full max-w-lg flex-col rounded-t-2xl bg-surface sm:rounded-2xl">
         <div className="flex items-center gap-2 border-b border-line px-4 py-2">
           <h2 className="flex-1 truncate text-base font-bold">{title}</h2>
           <IconButton icon="x" label="Закрыть" onClick={onClose} />
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">{open ? children : content.current}</div>
         {footer && <div className="border-t border-line px-4 py-3">{footer}</div>}
       </div>
     </div>

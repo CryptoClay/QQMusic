@@ -1,3 +1,4 @@
+import { MotionSurface } from './components/MotionSurface';
 import { PlayerRuntime } from './lib/remotePlayer';
 import { PlayerToolSheets } from './components/PlayerTools';
 import { MetadataPage } from './pages/Metadata';
@@ -262,11 +263,11 @@ function PrivateApp() {
       <NetworkStatus />
       {desktopShell ? (
         <DesktopShell me={me} active={resolved?.tab ?? null}>
-          <main id="desktop-main" tabIndex={-1} className={cx('mx-auto min-h-dvh w-full px-4 pb-8', wide ? 'max-w-[1480px]' : 'max-w-[1280px]')}>{resolved?.node}<PlayerSpacer /></main>
+          <main id="desktop-main" tabIndex={-1} className={cx('mx-auto min-h-dvh w-full px-4 pb-8', wide ? 'max-w-[1480px]' : 'max-w-[1280px]')}><MotionSurface page={route.path}>{resolved?.node}</MotionSurface><PlayerSpacer /></main>
         </DesktopShell>
       ) : (
         <main className={cx('mx-auto min-h-dvh', wide ? 'max-w-6xl' : 'max-w-2xl', !fullPlayer && 'pb-[calc(var(--tabbar-h)+16px+env(safe-area-inset-bottom))]')}>
-          {resolved?.node}
+          <MotionSurface page={route.path}>{resolved?.node}</MotionSurface>
           {!fullPlayer && <PlayerSpacer />}
         </main>
       )}
