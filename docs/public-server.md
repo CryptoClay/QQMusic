@@ -4,6 +4,8 @@
 
 ## Подготовка
 
+Если HTTPS уже обслуживает Nginx Proxy Manager на другом сервере, использовать [вариант с внешним прокси](reverse-proxy.md) вместо конфигурации Caddy ниже.
+
 1. Скопировать .env.example в .env и config.example.yaml в config.yaml. Сгенерировать HUB_SECRET_KEY и ND_PASSWORDENCRYPTIONKEY по README. Ключи не менять после начала использования.
 2. Задать MUSIC_ROOT абсолютным путём, например /srv/qqmusic/music, создать в нём library. Ограничить доступ к .env, config.yaml, резервным копиям и SSH-ключам.
 3. Задать QQM_DOMAIN=music.example.com в .env, заменив имя своим доменом. Не включать SMTP-регистрацию до проверки приглашений, квот и лимитов пользователей.
