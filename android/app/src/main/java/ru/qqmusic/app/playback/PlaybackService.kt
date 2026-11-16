@@ -123,17 +123,20 @@ class PlaybackService : MediaSessionService() {
     }
 
     private fun canLike(session: MediaSession, controller: MediaSession.ControllerInfo): Boolean =
-        controller.isTrusted && (
-            controller.uid == Process.myUid() || controller.uid == Process.SYSTEM_UID ||
-                session.isMediaNotificationController(controller)
-            )
+        controller.uid == Process.myUid() || (controller.isTrusted && (
+            controller.uid == Process.SYSTEM_UID || session.isMediaNotificationController(controller)
+        ))
 
     private inner class SessionCallback : MediaSession.Callback {
         override fun onConnect(
             session: MediaSession,
             controller: MediaSession.ControllerInfo,
         ): MediaSession.ConnectionResult {
-            if (!controller.isTrusted) return MediaSession.ConnectionResult.reject()
+            // isTrusted describes privileged system/media controllers, not ownership of our UI.
+            // The app's own UID must be accepted even without MEDIA_CONTENT_CONTROL.
+            if (controller.uid != Process.myUid() && !controller.isTrusted) {
+                return MediaSession.ConnectionResult.reject()
+            }
             val commands = MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS.buildUpon()
                 .remove(Player.COMMAND_SEEK_BACK)
                 .remove(Player.COMMAND_SEEK_FORWARD)

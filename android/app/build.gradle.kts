@@ -13,7 +13,7 @@ android {
         applicationId = "ru.qqmusic.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = providers.gradleProperty("qqmVersionCode").orElse("2").get().toInt()
+        versionCode = providers.gradleProperty("qqmVersionCode").orElse("3").get().toInt()
         versionName = providers.gradleProperty("qqmVersionName").orElse("0.1.0").get()
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -59,4 +59,14 @@ dependencies {
     testImplementation("org.json:json:20250517")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     testImplementation("com.squareup.okhttp3:okhttp-tls:4.12.0")
+}
+
+dependencies {
+    androidTestImplementation(platform("androidx.compose:compose-bom:2025.11.01"))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:core-ktx:1.6.1")
+    androidTestImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    androidTestImplementation("com.squareup.okhttp3:okhttp-tls:4.12.0")
 }

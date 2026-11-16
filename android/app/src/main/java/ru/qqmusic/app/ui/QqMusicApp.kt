@@ -71,7 +71,12 @@ fun QqMusicApp(vm: AppViewModel) {
                                 icon = { Icon(Icons.Default.QueueMusic, null) }, label = { Text("Плейлисты") })
                         }
                     } }) { insets ->
-                        Library(state, playback, vm, Modifier.padding(insets))
+                        Column(Modifier.padding(insets)) {
+                            playback.error?.let {
+                                Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+                            }
+                            Library(state, playback, vm, Modifier.weight(1f))
+                        }
                     }
                 }
             }

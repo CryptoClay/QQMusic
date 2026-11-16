@@ -54,10 +54,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var playlistId: String? = null
     private var authEpoch = 0
     private val pendingLikes = mutableSetOf<String>()
+    private var pendingPlayback: Pair<List<Track>, Int>? = null
+    private var connectionTimeout: Job? = null
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) { syncPlayer() }
         override fun onPlayerError(error: PlaybackException) {
-            mutablePlayback.update { it.copy(error = "Не удалось воспроизвести трек. Проверь сеть и войди снова, если сессия истекла.") }
+            val status = generateSequence<Throwable>(error) { it.cause }
+                .filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>()
+                .firstOrNull()?.responseCode
+            val message = when (status) {
+                401 -> "Сессия истекла. Выйди из аккаунта и войди снова."
+                404 -> "Аудиофайл не найден на сервере."
+                null -> "Ошибка воспроизведения: ${error.errorCodeName}. Проверь подключение."
+                else -> "Сервер не отдал аудио (HTTP $status)."
+            }
+            mutablePlayback.update { it.copy(error = message) }
         }
     }
 
@@ -113,16 +124,39 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val future = MediaController.Builder(getApplication(), token).buildAsync()
         controllerFuture = future
         future.addListener({
-            if (epoch != authEpoch || state.value.user == null) return@addListener
+            if (epoch != authEpoch || state.value.user == null || controllerFuture !== future) return@addListener
             runCatching {
                 controller = future.get()
                 controller?.addListener(listener)
+                connectionTimeout?.cancel()
+                mutablePlayback.update { it.copy(error = null) }
                 syncPlayer()
-            }.onFailure { mutablePlayback.update { it.copy(error = "Не удалось подключить плеер") } }
+                pendingPlayback?.let { (tracks, index) ->
+                    pendingPlayback = null
+                    startPlayback(tracks, index)
+                }
+            }.onFailure {
+                controllerFuture = null
+                connectionTimeout?.cancel()
+                pendingPlayback = null
+                mutablePlayback.update { it.copy(connected = false, error = "Не удалось подключить плеер. Нажми на трек, чтобы повторить.") }
+            }
         }, java.util.concurrent.Executor { android.os.Handler(android.os.Looper.getMainLooper()).post(it) })
+        connectionTimeout?.cancel()
+        connectionTimeout = viewModelScope.launch {
+            delay(15000)
+            if (controllerFuture === future && controller == null) {
+                controllerFuture = null
+                pendingPlayback = null
+                MediaController.releaseFuture(future)
+                mutablePlayback.update { it.copy(error = "Плеер не отвечает. Нажми на трек, чтобы подключиться снова.") }
+            }
+        }
     }
 
     private fun disconnectPlayer() {
+        connectionTimeout?.cancel()
+        pendingPlayback = null
         controller?.apply { stop(); clearMediaItems(); removeListener(listener) }
         controllerFuture?.let { MediaController.releaseFuture(it) }
         controller = null; controllerFuture = null
@@ -193,11 +227,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun play(track: Track) {
         if (!track.playable) return
-        val player = controller ?: return
         val visible = state.value.tracks.filter { it.playable }
         val list = if (visible.any { it.ref == track.ref }) visible else playback.value.queue
         val index = list.indexOfFirst { it.ref == track.ref }
         if (index < 0) return
+        if (controller == null) {
+            pendingPlayback = list to index
+            mutablePlayback.update { it.copy(error = "Подключаем плеер…") }
+            if (controllerFuture?.isDone != false) {
+                controllerFuture?.let { MediaController.releaseFuture(it) }
+                connectPlayer()
+            }
+            return
+        }
+        startPlayback(list, index)
+    }
+
+    private fun startPlayback(list: List<Track>, index: Int) {
+        val player = controller ?: return
         val items = list.map { t ->
             val metadata = MediaMetadata.Builder().setTitle(t.title).setArtist(t.artist).setAlbumTitle(t.album)
                 .setIsPlayable(true).setIsBrowsable(false)
