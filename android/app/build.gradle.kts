@@ -13,7 +13,7 @@ android {
         applicationId = "ru.qqmusic.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = providers.gradleProperty("qqmVersionCode").orElse("1").get().toInt()
+        versionCode = providers.gradleProperty("qqmVersionCode").orElse("2").get().toInt()
         versionName = providers.gradleProperty("qqmVersionName").orElse("0.1.0").get()
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

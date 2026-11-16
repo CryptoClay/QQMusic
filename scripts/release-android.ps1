@@ -11,7 +11,7 @@ pwsh -File scripts/release-android.ps1 -Configuration Release -VersionName 0.1.0
 param(
     [ValidateSet('Debug','Release')][string]$Configuration = 'Debug',
     [ValidatePattern('^\d+\.\d+\.\d+$')][string]$VersionName = '0.1.0',
-    [ValidateRange(1,2100000000)][int]$VersionCode = 1,
+    [ValidateRange(1,2100000000)][int]$VersionCode = 2,
     [string]$AndroidPath,
     [string]$JavaHome,
     [string]$AndroidSdk,

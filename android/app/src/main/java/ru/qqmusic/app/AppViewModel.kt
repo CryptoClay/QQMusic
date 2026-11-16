@@ -49,6 +49,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private var dataJob: Job? = null
     private var searchJob: Job? = null
+    private var logoutJob: Job? = null
     private var liked = emptySet<String>()
     private var playlistId: String? = null
     private var authEpoch = 0
@@ -78,7 +79,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun login(server: String, user: String, password: String) {
-        if (state.value.busy) return
+        if (state.value.busy || logoutJob?.isActive == true) return
         mutableState.update { it.copy(busy = true, error = null) }
         viewModelScope.launch {
             try {
@@ -100,7 +101,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val cookies = AppGraph.cookies
         mutableState.value = AppState(server = api.origin, restoring = false, busy = true)
         liked = emptySet()
-        viewModelScope.launch { try { api.logout() } catch (_: Exception) {} finally {
+        logoutJob = viewModelScope.launch { try { api.logout() } catch (_: Exception) {} finally {
             cookies.clear()
             mutableState.update { it.copy(busy = false) }
         } }
@@ -162,6 +163,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         dataJob?.cancel()
         val snapshot = state.value
         val selected = playlistId
+        val epoch = authEpoch
         dataJob = viewModelScope.launch {
             mutableState.update { it.copy(busy = true, error = null) }
             try {
@@ -185,7 +187,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
             } catch (e: Exception) { handleError(e) }
-            finally { mutableState.update { it.copy(busy = false) } }
+            finally { if (epoch == authEpoch) mutableState.update { it.copy(busy = false) } }
         }
     }
 
