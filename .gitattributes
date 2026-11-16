@@ -3,3 +3,6 @@
 
 # Append-only agent journal: parallel branches add entries at the end without rebase conflicts
 OPTIMIZE-TODO.md merge=union
+
+# Gradle Unix wrapper must stay executable by bash on CI/Linux.
+android/gradlew text eol=lf
